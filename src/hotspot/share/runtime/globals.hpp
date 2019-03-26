@@ -2542,7 +2542,10 @@ define_pd_global(uint64_t,MaxRAM,                    1ULL*G);
           "Start flight recording with options"))                           \
                                                                             \
   experimental(bool, UseFastUnorderedTimeStamps, false,                     \
-          "Use platform unstable time where supported for timestamps only")
+          "Use platform unstable time where supported for timestamps only") \
+                                                                            \
+  product(bool, ThreadSanitizer, false,                                     \
+          "Detect data races with ThreadSanitizer")
 
 #define VM_FLAGS(develop,                                                   \
                  develop_pd,                                                \
