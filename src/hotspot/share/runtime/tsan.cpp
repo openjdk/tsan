@@ -45,3 +45,21 @@ void tsan_exit() {
     vm_direct_exit(status);
   }
 }
+
+// The type of the callback TSAN passes to __tsan_symbolize_external_ex.
+// When __tsan_symbolize_external_ex has found a frame, it calls this callback,
+// passing along opaque context and frame's location (function name, file
+// where it is defined and line and column numbers). Note that we always pass
+// -1 as a column.
+typedef void (*AddFrameFunc)(void *ctx, const char *function, const char *file,
+                             int line, int column);
+
+// TSAN calls this to symbolize Java frames.
+// This is not in tsanExternalDecls.hpp because this is a function that the JVM
+// is supposed to override which TSAN will call, not a TSAN function that the
+// JVM calls.
+extern "C" void __tsan_symbolize_external_ex(int64 pc,
+                                             AddFrameFunc addFrame,
+                                             void *ctx) {
+}
+
