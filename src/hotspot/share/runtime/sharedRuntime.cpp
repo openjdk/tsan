@@ -66,6 +66,7 @@
 #include "runtime/javaCalls.hpp"
 #include "runtime/sharedRuntime.hpp"
 #include "runtime/stubRoutines.hpp"
+#include "runtime/tsanExternalDecls.hpp"
 #include "runtime/vframe.inline.hpp"
 #include "runtime/vframeArray.hpp"
 #include "utilities/copy.hpp"
@@ -1036,6 +1037,43 @@ JRT_LEAF(int, SharedRuntime::dtrace_method_exit(
       (char *) name->bytes(), name->utf8_length(),
       (char *) sig->bytes(), sig->utf8_length());
   return 0;
+JRT_END
+
+// TSAN: method entry callback from interpreter
+// (1) In order to have the line numbers in the call stack, we use the caller
+//     address instead of the method that's being called. This also matches
+//     the entry/exit convention that TSAN uses for C++.
+// We use JRT_ENTRY since call_VM_leaf doesn't set _last_Java_sp that we need.
+JRT_ENTRY(void, SharedRuntime::tsan_interp_method_entry(JavaThread *thread))
+  DEBUG_ONLY(NoSafepointVerifier nsv;)
+  DEBUG_ONLY(NoAllocVerifier nav;)
+  DEBUG_ONLY(NoHandleMark nhm;)
+  assert(ThreadSanitizer, "Need -XX:+ThreadSanitizer");
+
+  RegisterMap unused_reg_map(thread, false);
+
+  // These asserts should be removed once
+  // we support more than just the interpreter for TSAN.
+  assert(!thread->last_frame().is_compiled_frame(),
+         "Current frame should not be a compiled frame");
+  const frame sender = thread->last_frame().real_sender(&unused_reg_map);
+  assert(!sender.is_compiled_frame(), "Sender should not be a compiled frame");
+
+  jmethodID jmethod_id = 0;
+  u2 bci = 0;
+  // TODO: is (0, 0) really the best we can do
+  // when the sender isn't an interpreted frame?
+  if (sender.is_interpreted_frame()) {
+    jmethod_id = sender.interpreter_frame_method()->find_jmethod_id_or_null();
+    bci = sender.interpreter_frame_bci();
+  }
+  __tsan_func_entry(tsan_code_location(jmethod_id, bci));
+JRT_END
+
+// TSAN: method exit callback from interpreter
+JRT_LEAF(void, SharedRuntime::tsan_interp_method_exit())
+  assert(ThreadSanitizer, "Need -XX:+ThreadSanitizer");
+  __tsan_func_exit();
 JRT_END
 
 

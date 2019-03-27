@@ -3850,6 +3850,11 @@ jint Arguments::parse(const JavaVMInitArgs* initial_cmd_args) {
   no_shared_spaces("CDS Disabled");
 #endif // INCLUDE_CDS
 
+  if (ThreadSanitizer) {
+    // Currently TSAN is only implemented for interpreter.
+    set_mode_flags(_int);
+  }
+
   return JNI_OK;
 }
 

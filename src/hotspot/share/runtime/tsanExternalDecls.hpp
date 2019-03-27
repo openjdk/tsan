@@ -44,6 +44,10 @@ extern "C" {
   // Called after Java application exits.
   // It does not have to be the final function called.
   int __tsan_java_fini() WEAK;
+
+  // Called on Java method entry and exit.
+  void __tsan_func_entry(void *pc) WEAK;
+  void __tsan_func_exit() WEAK;
 }
 
 #endif  // SHARE_RUNTIME_TSANEXTERNALDECLS_HPP

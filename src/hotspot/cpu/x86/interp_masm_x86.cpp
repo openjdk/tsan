@@ -1994,6 +1994,13 @@ void InterpreterMacroAssembler::notify_method_entry() {
                  rthread, rarg);
   }
 
+  if (ThreadSanitizer) {
+    NOT_LP64(get_thread(rthread);)
+    call_VM(noreg, CAST_FROM_FN_PTR(address,
+                                    SharedRuntime::tsan_interp_method_entry),
+            rthread);
+  }
+
   // RedefineClasses() tracing support for obsolete method entry
   if (log_is_enabled(Trace, redefine, class, obsolete)) {
     NOT_LP64(get_thread(rthread);)
@@ -2028,6 +2035,13 @@ void InterpreterMacroAssembler::notify_method_exit(
     call_VM(noreg,
             CAST_FROM_FN_PTR(address, InterpreterRuntime::post_method_exit));
     bind(L);
+    pop(state);
+  }
+
+  if (ThreadSanitizer) {
+    push(state);
+    call_VM_leaf(CAST_FROM_FN_PTR(address,
+                                  SharedRuntime::tsan_interp_method_exit));
     pop(state);
   }
 
