@@ -58,7 +58,7 @@ typedef void (*AddFrameFunc)(void *ctx, const char *function, const char *file,
 // This is not in tsanExternalDecls.hpp because this is a function that the JVM
 // is supposed to override which TSAN will call, not a TSAN function that the
 // JVM calls.
-extern "C" void __tsan_symbolize_external_ex(int64 pc,
+extern "C" void __tsan_symbolize_external_ex(julong pc,
                                              AddFrameFunc addFrame,
                                              void *ctx) {
 }
