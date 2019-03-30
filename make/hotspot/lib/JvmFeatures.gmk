@@ -178,6 +178,11 @@ ifneq ($(call check-jvm-feature, jfr), true)
   JVM_EXCLUDE_PATTERNS += jfr
 endif
 
+ifneq ($(call check-jvm-feature, tsan), true)
+  JVM_CFLAGS_FEATURES += -DINCLUDE_TSAN=0
+  JVM_EXCLUDE_PATTERNS += tsan
+endif
+
 ################################################################################
 
 ifeq ($(call check-jvm-feature, link-time-opt), true)

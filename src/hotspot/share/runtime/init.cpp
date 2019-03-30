@@ -61,7 +61,7 @@ void os_init_globals();        // depends on VM_Version_init, before universe_in
 void stubRoutines_init1();
 jint universe_init();          // depends on codeCache_init and stubRoutines_init
 // depends on universe_init, must be before interpreter_init (currently only on SPARC)
-jint tsan_init();
+TSAN_ONLY(jint tsan_init();)
 void gc_barrier_stubs_init();
 void interpreter_init();       // before any methods loaded
 void invocationCounter_init(); // before any methods loaded
@@ -89,7 +89,7 @@ void stubRoutines_init2(); // note: StubRoutines need 2-phase init
 // during VM shutdown
 void perfMemory_exit();
 void ostream_exit();
-void tsan_exit();
+TSAN_ONLY(void tsan_exit();)
 
 void vm_init_globals() {
   check_ThreadShadow();
@@ -116,12 +116,14 @@ jint init_globals() {
   if (status != JNI_OK)
     return status;
 
+#if INCLUDE_TSAN
   if (ThreadSanitizer) {
     status = tsan_init();
     if (status != JNI_OK) {
       return status;
     }
   }
+#endif // INCLUDE_TSAN
 
   gc_barrier_stubs_init();   // depends on universe_init, must be before interpreter_init
   interpreter_init();        // before any methods loaded
@@ -174,9 +176,13 @@ void exit_globals() {
   static bool destructorsCalled = false;
   if (!destructorsCalled) {
     destructorsCalled = true;
+
+#if INCLUDE_TSAN
     if (ThreadSanitizer) {
       tsan_exit();
     }
+#endif // INCLUDE_TSAN
+
     if (log_is_enabled(Info, monitorinflation)) {
       // The ObjectMonitor subsystem uses perf counters so
       // do this before perfMemory_exit().

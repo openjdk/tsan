@@ -66,7 +66,6 @@
 #include "runtime/javaCalls.hpp"
 #include "runtime/sharedRuntime.hpp"
 #include "runtime/stubRoutines.hpp"
-#include "runtime/tsanExternalDecls.hpp"
 #include "runtime/vframe.inline.hpp"
 #include "runtime/vframeArray.hpp"
 #include "utilities/copy.hpp"
@@ -77,6 +76,9 @@
 #include "utilities/xmlstream.hpp"
 #ifdef COMPILER1
 #include "c1/c1_Runtime1.hpp"
+#endif
+#if INCLUDE_TSAN
+#include "tsan/tsanExternalDecls.hpp"
 #endif
 
 // Shared stub locations
@@ -1039,6 +1041,7 @@ JRT_LEAF(int, SharedRuntime::dtrace_method_exit(
   return 0;
 JRT_END
 
+#if INCLUDE_TSAN
 // TSAN: method entry callback from interpreter
 // (1) In order to have the line numbers in the call stack, we use the caller
 //     address instead of the method that's being called. This also matches
@@ -1076,6 +1079,7 @@ JRT_LEAF(void, SharedRuntime::tsan_interp_method_exit())
   __tsan_func_exit();
 JRT_END
 
+#endif // INCLUDE_TSAN
 
 // Finds receiver, CallInfo (i.e. receiver method), and calling bytecode)
 // for a call current in progress, i.e., arguments has been pushed on stack

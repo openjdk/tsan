@@ -1994,12 +1994,14 @@ void InterpreterMacroAssembler::notify_method_entry() {
                  rthread, rarg);
   }
 
+#if INCLUDE_TSAN
   if (ThreadSanitizer) {
     NOT_LP64(get_thread(rthread);)
     call_VM(noreg, CAST_FROM_FN_PTR(address,
                                     SharedRuntime::tsan_interp_method_entry),
             rthread);
   }
+#endif // INCLUDE_TSAN
 
   // RedefineClasses() tracing support for obsolete method entry
   if (log_is_enabled(Trace, redefine, class, obsolete)) {
@@ -2038,12 +2040,14 @@ void InterpreterMacroAssembler::notify_method_exit(
     pop(state);
   }
 
+#if INCLUDE_TSAN
   if (ThreadSanitizer) {
     push(state);
     call_VM_leaf(CAST_FROM_FN_PTR(address,
                                   SharedRuntime::tsan_interp_method_exit));
     pop(state);
   }
+#endif // INCLUDE_TSAN
 
   {
     SkipIfEqual skip(this, &DTraceMethodProbes, false);

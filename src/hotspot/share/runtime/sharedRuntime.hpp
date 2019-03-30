@@ -281,6 +281,7 @@ class SharedRuntime: AllStatic {
   static int dtrace_method_entry(JavaThread* thread, Method* m);
   static int dtrace_method_exit(JavaThread* thread, Method* m);
 
+#if INCLUDE_TSAN
   // TSAN instrumentation
 
   // TSAN uses a 64-bit value to identify code location.
@@ -313,6 +314,8 @@ class SharedRuntime: AllStatic {
   // Java method entry/exit from code run by template interpreter
   static void tsan_interp_method_entry(JavaThread *thread);
   static void tsan_interp_method_exit();
+
+#endif // INCLUDE_TSAN
 
   // Utility method for retrieving the Java thread id, returns 0 if the
   // thread is not a well formed Java thread.

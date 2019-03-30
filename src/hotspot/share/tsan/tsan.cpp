@@ -26,7 +26,7 @@
 #include "gc/shared/collectedHeap.hpp"
 #include "memory/universe.hpp"
 #include "runtime/java.hpp"
-#include "runtime/tsanExternalDecls.hpp"
+#include "tsan/tsanExternalDecls.hpp"
 #include "utilities/globalDefinitions.hpp"
 
 jint tsan_init() {

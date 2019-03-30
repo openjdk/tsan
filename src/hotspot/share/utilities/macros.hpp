@@ -283,6 +283,16 @@
 #define JFR_ONLY(code)
 #endif
 
+#ifndef INCLUDE_TSAN
+#define INCLUDE_TSAN 1
+#endif
+
+#if INCLUDE_TSAN
+#define TSAN_ONLY(code) code
+#else
+#define TSAN_ONLY(code)
+#endif
+
 #ifndef INCLUDE_JVMCI
 #define INCLUDE_JVMCI 1
 #endif

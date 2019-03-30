@@ -2416,6 +2416,7 @@ nmethod* SharedRuntime::generate_native_wrapper(MacroAssembler* masm,
     restore_args(masm, total_c_args, c_arg, out_regs);
   }
 
+#if INCLUDE_TSAN
   if (ThreadSanitizer) {
     // protect the args we've loaded
     save_args(masm, total_c_args, c_arg, out_regs);
@@ -2424,6 +2425,7 @@ nmethod* SharedRuntime::generate_native_wrapper(MacroAssembler* masm,
       r15_thread);
     restore_args(masm, total_c_args, c_arg, out_regs);
   }
+#endif // INCLUDE_TSAN
 
   // RedefineClasses() tracing support for obsolete method entry
   if (log_is_enabled(Trace, redefine, class, obsolete)) {
@@ -2676,12 +2678,14 @@ nmethod* SharedRuntime::generate_native_wrapper(MacroAssembler* masm,
 
   }
 
+#if INCLUDE_TSAN
   if (ThreadSanitizer) {
     save_native_result(masm, ret_type, stack_slots);
     __ call_VM_leaf(
          CAST_FROM_FN_PTR(address, SharedRuntime::tsan_interp_method_exit));
     restore_native_result(masm, ret_type, stack_slots);
   }
+#endif // INCLUDE_TSAN
 
   {
     SkipIfEqual skip(masm, &DTraceMethodProbes, false);

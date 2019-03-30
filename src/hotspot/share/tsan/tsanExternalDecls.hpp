@@ -23,8 +23,8 @@
  *
  */
 
-#ifndef SHARE_RUNTIME_TSANEXTERNALDECLS_HPP
-#define SHARE_RUNTIME_TSANEXTERNALDECLS_HPP
+#ifndef SHARE_TSAN_TSANEXTERNALDECLS_HPP
+#define SHARE_TSAN_TSANEXTERNALDECLS_HPP
 
 #include "utilities/globalDefinitions.hpp"
 
@@ -50,4 +50,4 @@ extern "C" {
   void __tsan_func_exit() WEAK;
 }
 
-#endif  // SHARE_RUNTIME_TSANEXTERNALDECLS_HPP
+#endif  // SHARE_TSAN_TSANEXTERNALDECLS_HPP
