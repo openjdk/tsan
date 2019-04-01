@@ -299,12 +299,20 @@ class SharedRuntime: AllStatic {
   // | Tsan: 3 | TsanJava: 1 | jmethodID: 44 | BCI: 16 |
   static const int tsan_method_id_alignment_bits = 3;
   static const int tsan_bci_bits = 16;
+  static const u8 tsan_bci_mask = right_n_bits(tsan_bci_bits);
   static const int tsan_method_id_shift = tsan_bci_bits -
       tsan_method_id_alignment_bits;
   static const u8 tsan_fake_pc_bit = 1L << 60;
   static void * tsan_code_location(jmethodID jmethod_id_ptr, u2 bci) {
     return (void *)(tsan_fake_pc_bit |
       (((u8)(jmethod_id_ptr)) << tsan_method_id_shift) | bci);
+  }
+  static jmethodID tsan_method_id_from_code_location(u8 loc) {
+    return (jmethodID)(
+        (loc & ~(tsan_fake_pc_bit | tsan_bci_mask)) >> tsan_method_id_shift);
+  }
+  static u2 tsan_bci_from_code_location(u8 loc) {
+    return (u2)(loc & tsan_bci_mask);
   }
 
   // These functions are wrappers around TSAN callbacks,

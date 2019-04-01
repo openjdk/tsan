@@ -25,7 +25,10 @@
 
 #include "gc/shared/collectedHeap.hpp"
 #include "memory/universe.hpp"
+#include "oops/method.hpp"
 #include "runtime/java.hpp"
+#include "runtime/safepointVerifiers.hpp"
+#include "runtime/sharedRuntime.hpp"
 #include "tsan/tsanExternalDecls.hpp"
 #include "utilities/globalDefinitions.hpp"
 
@@ -54,12 +57,50 @@ void tsan_exit() {
 typedef void (*AddFrameFunc)(void *ctx, const char *function, const char *file,
                              int line, int column);
 
+static void TsanSymbolizeMethod(Method* m, u2 bci, AddFrameFunc add_frame,
+                                void* ctx) {
+  char methodname_buf[256];
+  char filename_buf[128];
+
+  m->name_and_sig_as_C_string(methodname_buf, sizeof(methodname_buf));
+  Symbol* filename = m->method_holder()->source_file_name();
+  if (filename != NULL) {
+    filename->as_C_string(filename_buf, sizeof(filename_buf));
+  } else {
+    filename_buf[0] = filename_buf[1] = '?';
+    filename_buf[2] = '\0';
+  }
+
+  add_frame(
+      ctx, methodname_buf, filename_buf, m->line_number_from_bci(bci), -1);
+}
+
 // TSAN calls this to symbolize Java frames.
 // This is not in tsanExternalDecls.hpp because this is a function that the JVM
 // is supposed to override which TSAN will call, not a TSAN function that the
 // JVM calls.
-extern "C" void __tsan_symbolize_external_ex(julong pc,
-                                             AddFrameFunc addFrame,
+extern "C" void __tsan_symbolize_external_ex(julong loc,
+                                             AddFrameFunc add_frame,
                                              void *ctx) {
+  DEBUG_ONLY(NoSafepointVerifier nsv;)
+  DEBUG_ONLY(NoAllocVerifier nav;)
+  assert(ThreadSanitizer, "Need -XX:+ThreadSanitizer");
+
+  assert((loc & SharedRuntime::tsan_fake_pc_bit) != 0,
+         "TSAN should only ask the JVM to symbolize locations the JVM gave TSAN"
+        );
+
+  jmethodID method_id = SharedRuntime::tsan_method_id_from_code_location(loc);
+  u2 bci = SharedRuntime::tsan_bci_from_code_location(loc);
+  Method *m;
+  if (method_id == 0) {
+    add_frame(
+        ctx, bci == 0 ? "(Generated Stub)" : "(Unknown Method)", NULL, -1, -1);
+  } else if ((m = Method::checked_resolve_jmethod_id(method_id)) != NULL) {
+    // Find a method by its jmethod_id. May fail if method has vanished since.
+    TsanSymbolizeMethod(m, bci, add_frame, ctx);
+  } else {
+    add_frame(ctx, "(Deleted method)", NULL, -1, -1);
+  }
 }
 
