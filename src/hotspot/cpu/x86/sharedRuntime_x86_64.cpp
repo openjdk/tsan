@@ -2506,6 +2506,16 @@ nmethod* SharedRuntime::generate_native_wrapper(MacroAssembler* masm,
     // Slow path will re-enter here
 
     __ bind(lock_done);
+
+#if INCLUDE_TSAN
+    if (ThreadSanitizer) {
+      __ pusha();
+      __ call_VM(noreg,
+                 CAST_FROM_FN_PTR(address, SharedRuntime::tsan_oop_lock),
+                 obj_reg);
+      __ popa();
+    }
+#endif // INCLUDE_TSAN
   }
 
 
@@ -2640,6 +2650,16 @@ nmethod* SharedRuntime::generate_native_wrapper(MacroAssembler* masm,
     // Get locked oop from the handle we passed to jni
     __ movptr(obj_reg, Address(oop_handle_reg, 0));
     __ resolve(IS_NOT_NULL, obj_reg);
+
+#if INCLUDE_TSAN
+    if (ThreadSanitizer) {
+      __ pusha();
+      __ call_VM(noreg, CAST_FROM_FN_PTR(address,
+                                         SharedRuntime::tsan_oop_unlock),
+                 obj_reg);
+      __ popa();
+    }
+#endif // INCLUDE_TSAN
 
     Label done;
 

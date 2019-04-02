@@ -48,6 +48,19 @@ extern "C" {
   // Called on Java method entry and exit.
   void __tsan_func_entry(void *pc) WEAK;
   void __tsan_func_exit() WEAK;
+
+  // Called when a thread enters an oop monitor.
+  void __tsan_java_mutex_lock(julong addr) WEAK;
+  // Called when a thread exits an oop monitor.
+  void __tsan_java_mutex_unlock(julong addr) WEAK;
+  // Called when a thread releases all recursive acquires for a monitor
+  // (i.e., during a wait()).
+  void __tsan_java_mutex_lock_rec(julong addr, int rec) WEAK;
+  // Called when a thread re-acquires all previous recursive acquires.
+  int __tsan_java_mutex_unlock_rec(julong addr) WEAK;
+  // More primitive lock notification for internal VM double-checked locking.
+  void __tsan_java_acquire(void* address) WEAK;
+  void __tsan_java_release(void* address) WEAK;
 }
 
 #endif  // SHARE_TSAN_TSANEXTERNALDECLS_HPP

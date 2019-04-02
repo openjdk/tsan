@@ -1153,6 +1153,11 @@ void InterpreterMacroAssembler::lock_object(Register lock_reg) {
   assert(lock_reg == LP64_ONLY(c_rarg1) NOT_LP64(rdx),
          "The argument is only for looks. It must be c_rarg1");
 
+#if INCLUDE_TSAN
+  if (ThreadSanitizer) {
+    push_ptr(lock_reg);
+  }
+#endif // INCLUDE_TSAN
   if (UseHeavyMonitors) {
     call_VM(noreg,
             CAST_FROM_FN_PTR(address, InterpreterRuntime::monitorenter),
@@ -1231,6 +1236,17 @@ void InterpreterMacroAssembler::lock_object(Register lock_reg) {
 
     bind(done);
   }
+
+#if INCLUDE_TSAN
+  if (ThreadSanitizer) {
+    pop_ptr(lock_reg);
+    pusha();
+    call_VM(noreg,
+            CAST_FROM_FN_PTR(address, SharedRuntime::tsan_interp_lock),
+            lock_reg);
+    popa();
+  }
+#endif // INCLUDE_TSAN
 }
 
 
@@ -1249,6 +1265,16 @@ void InterpreterMacroAssembler::lock_object(Register lock_reg) {
 void InterpreterMacroAssembler::unlock_object(Register lock_reg) {
   assert(lock_reg == LP64_ONLY(c_rarg1) NOT_LP64(rdx),
          "The argument is only for looks. It must be c_rarg1");
+
+#if INCLUDE_TSAN
+  if (ThreadSanitizer) {
+    pusha();
+    call_VM(noreg,
+            CAST_FROM_FN_PTR(address, SharedRuntime::tsan_interp_unlock),
+            lock_reg);
+    popa();
+  }
+#endif // INCLUDE_TSAN
 
   if (UseHeavyMonitors) {
     call_VM(noreg,

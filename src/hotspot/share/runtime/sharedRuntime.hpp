@@ -323,6 +323,18 @@ class SharedRuntime: AllStatic {
   static void tsan_interp_method_entry(JavaThread *thread);
   static void tsan_interp_method_exit();
 
+  // Monitor acquire/release in VM code
+  // (e.g., generated native method wrapper, JNI heavyweight locks)
+  static void tsan_oop_lock(Thread* thread, oop obj);
+  static void tsan_oop_unlock(Thread* thread, oop obj);
+  // Monitor acquire/release in VM code; recursive lock variant (e.g., wait())
+  static void tsan_oop_rec_lock(Thread* thread, oop obj, int rec);
+  static int tsan_oop_rec_unlock(Thread* thread, oop obj);
+
+  // Monitor acquire/release from code run by template interpreter
+  static void tsan_interp_lock(JavaThread* thread, BasicObjectLock* elem);
+  static void tsan_interp_unlock(JavaThread* thread, BasicObjectLock* elem);
+
 #endif // INCLUDE_TSAN
 
   // Utility method for retrieving the Java thread id, returns 0 if the

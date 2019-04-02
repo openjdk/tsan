@@ -1079,6 +1079,70 @@ JRT_LEAF(void, SharedRuntime::tsan_interp_method_exit())
   __tsan_func_exit();
 JRT_END
 
+void SharedRuntime::tsan_oop_lock(Thread* thread, oop obj) {
+  DEBUG_ONLY(NoSafepointVerifier nsv;)
+  assert(ThreadSanitizer, "Need -XX:+ThreadSanitizer");
+  assert(thread != NULL, "null thread");
+  assert(obj != NULL, "null oop");
+  assert(oopDesc::is_oop(obj, false), "invalid oop");
+
+  __tsan_java_mutex_lock((julong)(address)obj);
+}
+
+void SharedRuntime::tsan_oop_unlock(Thread *thread, oop obj) {
+  DEBUG_ONLY(NoSafepointVerifier nsv;)
+  assert(ThreadSanitizer, "Need -XX:+ThreadSanitizer");
+  assert(thread != NULL, "null thread");
+  assert(obj != NULL, "null oop");
+  assert(oopDesc::is_oop(obj, false), "invalid oop");
+
+  __tsan_java_mutex_unlock((julong)(address)obj);
+}
+
+void SharedRuntime::tsan_oop_rec_lock(Thread* thread, oop obj, int rec) {
+  DEBUG_ONLY(NoSafepointVerifier nsv;)
+  assert(ThreadSanitizer, "Need -XX:+ThreadSanitizer");
+  assert(thread != NULL, "null thread");
+  assert(obj != NULL, "null oop");
+  assert(oopDesc::is_oop(obj, false), "invalid oop");
+
+  __tsan_java_mutex_lock_rec((julong)(address)obj, rec);
+}
+
+int SharedRuntime::tsan_oop_rec_unlock(Thread *thread, oop obj) {
+  DEBUG_ONLY(NoSafepointVerifier nsv;)
+  assert(ThreadSanitizer, "Need -XX:+ThreadSanitizer");
+  assert(thread != NULL, "null thread");
+  assert(obj != NULL, "null oop");
+  assert(oopDesc::is_oop(obj, false), "invalid oop");
+
+  return __tsan_java_mutex_unlock_rec((julong)(address)obj);
+}
+
+JRT_LEAF(void, SharedRuntime::tsan_interp_lock(JavaThread* thread,
+                                               BasicObjectLock* elem))
+  DEBUG_ONLY(thread->last_frame().interpreter_frame_verify_monitor(elem);)
+  assert(elem != NULL, "null elem");
+
+  oop obj = elem->obj();
+  tsan_oop_lock(thread, obj);
+
+  assert(obj == elem->obj(), "oop changed");
+  DEBUG_ONLY(thread->last_frame().interpreter_frame_verify_monitor(elem);)
+JRT_END
+
+JRT_LEAF(void, SharedRuntime::tsan_interp_unlock(JavaThread* thread,
+                                                 BasicObjectLock* elem))
+  DEBUG_ONLY(thread->last_frame().interpreter_frame_verify_monitor(elem);)
+  assert(elem != NULL, "null elem");
+
+  oop obj = elem->obj();
+  tsan_oop_unlock(thread, obj);
+
+  assert(obj == elem->obj(), "oop changed");
+  DEBUG_ONLY(thread->last_frame().interpreter_frame_verify_monitor(elem);)
+JRT_END
+
 #endif // INCLUDE_TSAN
 
 // Finds receiver, CallInfo (i.e. receiver method), and calling bytecode)
