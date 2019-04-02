@@ -22,11 +22,11 @@
  * questions.
  */
 
-/* @test RacyIntMemberLoopTest
- * @summary Test a simple Java data race via an int member field.
+/* @test RacyNativeLoopTest
+ * @summary Test a simple native data race.
  * @library /test/lib
- * @build AbstractLoop TsanRunner
- * @run main/othervm -XX:+ThreadSanitizer RacyIntMemberLoopTest
+ * @build AbstractLoop AbstractNativeLoop TsanRunner
+ * @run main/othervm/native -XX:+ThreadSanitizer RacyNativeLoopTest
  */
 
 import java.io.IOException;
@@ -34,40 +34,25 @@ import jdk.test.lib.process.OutputAnalyzer;
 import jdk.test.lib.process.ProcessTools;
 
 /**
- * Test a Java race on an integer member field.
+ * Test that TSAN correctly detects a race in native code.
  */
-public class RacyIntMemberLoopTest {
+public class RacyNativeLoopTest {
   public static void main(String[] args) throws IOException {
-    boolean caught = false;
-
-    try {
-      TsanRunner.runTsanTestExpectFailure(RacyIntMemberLoopRunner.class)
-          .shouldMatch("(Read|Write) of size 4 at 0x[0-9a-fA-F]+ by thread T[0-9]+")
-          .shouldContain(" #0 com.google.devtools.java.tsan.RacyIntMemberLoopTest.run(I)V "
-              + "RacyIntMemberLoopTest.java:");
-    } catch (RuntimeException e) {
-      // We expect it to fail for now: until TSAN is up and running, we should not be passing this
-      // test and will throw a RuntimeException instead.
-      caught = true;
-    }
-
-    if (!caught) {
-      throw new RuntimeException("Passed unexpectedly.");
-    }
+    TsanRunner.runTsanTestExpectFailure(RacyNativeLoopRunner.class)
+        .shouldMatch("Write of size 4 at 0x[0-9a-fA-F]+ by thread T[0-9]+")
+        .shouldContain(" #0 Java_AbstractNativeLoop_writeNativeGlobal");
   }
 }
 
-class RacyIntMemberLoopRunner extends AbstractLoop {
-  private int x = 0;
-
+class RacyNativeLoopRunner extends AbstractNativeLoop {
   @Override
   protected void run(int i) {
-    x = x + 1;
+    writeNativeGlobal();
   }
 
   public static void main(String[] args) throws InterruptedException {
-    RacyIntMemberLoopRunner loop = new RacyIntMemberLoopRunner();
+    RacyNativeLoopRunner loop = new RacyNativeLoopRunner();
     loop.runInTwoThreads();
-    System.out.format("x = %d\n", loop.x);
+    System.out.format("native_global = %d\n", loop.readNativeGlobal());
   }
 }
