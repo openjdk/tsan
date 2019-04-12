@@ -339,15 +339,6 @@ AC_DEFUN_ONCE([HOTSPOT_SETUP_JVM_FEATURES],
     fi
   fi
 
-  # Only enable ThreadSanitizer on supported platforms
-  AC_MSG_CHECKING([if tsan can be built])
-  if test "x$OPENJDK_TARGET_OS" = "xlinux" && test "x$OPENJDK_TARGET_CPU" = "xx86_64"; then
-    AC_MSG_RESULT([yes])
-  else
-    DISABLED_JVM_FEATURES="$DISABLED_JVM_FEATURES tsan"
-    AC_MSG_RESULT([no, platform not supported])
-  fi
-
   # Only enable Shenandoah on supported arches
   AC_MSG_CHECKING([if shenandoah can be built])
   if test "x$OPENJDK_TARGET_CPU" = "xx86_64" || test "x$OPENJDK_TARGET_CPU" = "xaarch64" ; then
@@ -499,7 +490,7 @@ AC_DEFUN_ONCE([HOTSPOT_SETUP_JVM_FEATURES],
   fi
 
   # All variants but minimal (and custom) get these features
-  NON_MINIMAL_FEATURES="$NON_MINIMAL_FEATURES cmsgc g1gc parallelgc serialgc epsilongc shenandoahgc jni-check jvmti management nmt services tsan vm-structs zgc"
+  NON_MINIMAL_FEATURES="$NON_MINIMAL_FEATURES cmsgc g1gc parallelgc serialgc epsilongc shenandoahgc jni-check jvmti management nmt services vm-structs zgc"
 
   # Disable CDS on AIX.
   if test "x$OPENJDK_TARGET_OS" = "xaix"; then
@@ -543,6 +534,26 @@ AC_DEFUN_ONCE([HOTSPOT_SETUP_JVM_FEATURES],
       AC_MSG_RESULT([no])
     fi
   fi
+
+  AC_MSG_CHECKING([if tsan should be built])
+  # Check if user explicitly disabled tsan
+  if HOTSPOT_IS_JVM_FEATURE_DISABLED(tsan); then
+    AC_MSG_RESULT([no, forced])
+    INCLUDE_TSAN="false"
+  # Only enable ThreadSanitizer on supported platforms
+  elif test "x$OPENJDK_TARGET_OS" = "xlinux" && test "x$OPENJDK_TARGET_CPU" = "xx86_64"; then
+    AC_MSG_RESULT([yes])
+    NON_MINIMAL_FEATURES="$NON_MINIMAL_FEATURES tsan"
+    INCLUDE_TSAN="true"
+  else
+    AC_MSG_RESULT([no, platform not supported])
+    INCLUDE_TSAN="false"
+    if HOTSPOT_CHECK_JVM_FEATURE(tsan); then
+      AC_MSG_ERROR([ThreadSanitizer is currently not supported on this platform.])
+    fi
+  fi
+
+  AC_SUBST(INCLUDE_TSAN)
 
   # Enable features depending on variant.
   JVM_FEATURES_server="compiler1 compiler2 $NON_MINIMAL_FEATURES $JVM_FEATURES $JVM_FEATURES_jvmci $JVM_FEATURES_aot $JVM_FEATURES_graal"

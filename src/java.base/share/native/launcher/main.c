@@ -213,3 +213,19 @@ main(int argc, char **argv)
                    jargc > 0,
                    const_cpwildcard, const_javaw, 0);
 }
+
+#ifdef INCLUDE_TSAN
+/* Override ThreadSanitizer's default race suppression list, so Java TSAN
+ * does not report C/C++ races within the JVM itself.
+ * Because currently we link TSAN runtime with the launcher,
+ * this function has to reside in the launcher in order to properly
+ * override TSAN's internal "weak" version of this function when
+ * TSAN runtime is initialized, which happens in ELF .preinit_array.
+ * 'visibility("default")' is needed due to CFLAGS '-fvisibility=hidden'.
+ */
+__attribute__((visibility("default"))) const char *__tsan_default_suppressions() {
+  return ("called_from_lib:/libjvm.so\n"
+          "called_from_lib:/libjimage.so\n");
+}
+#endif /* INCLUDE_TSAN */
+

@@ -44,6 +44,7 @@ $(eval $(call SetupBuildLauncher, java, \
     VERSION_INFO_RESOURCE := $(JAVA_VERSION_INFO_RESOURCE), \
     OUTPUT_DIR := $(SUPPORT_OUTPUTDIR)/native/$(MODULE)/java_objs, \
     OPTIMIZATION := HIGH, \
+    INCLUDE_TSAN := $(INCLUDE_TSAN), \
 ))
 
 $(SUPPORT_OUTPUTDIR)/modules_cmds/java.base/java$(EXE_SUFFIX): $(BUILD_LAUNCHER_java)
