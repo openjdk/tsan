@@ -5631,6 +5631,23 @@ void ClassFileParser::fill_instance_klass(InstanceKlass* ik, bool changed_by_loa
 
   ClassLoadingService::notify_class_loaded(ik, false /* not shared class */);
 
+#if INCLUDE_TSAN
+  if (ThreadSanitizer && !ik->is_interface()) {
+    ik->ensure_space_for_methodids(0);
+    int num_methods = ik->methods()->length();
+    for (int index = 0; index < num_methods; index++) {
+      // Make sure each method has a jmethodID.
+      // This allows us to avoid allocating jmethodIDs during program execution.
+      jmethodID id = ik->methods()->at(index)->jmethod_id();
+#ifdef ASSERT
+      u8 id_u8 = reinterpret_cast<u8>(id);
+      assert((id_u8 & right_n_bits(3)) == 0, "jmethodID is not aligned");
+      assert((id_u8 & left_n_bits(17)) == 0, "jmethodID is not aligned");
+#endif
+    }
+  }
+#endif // INCLUDE_TSAN
+
   if (!is_internal()) {
     if (log_is_enabled(Info, class, load)) {
       ResourceMark rm;
