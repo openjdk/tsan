@@ -1996,10 +1996,8 @@ void InterpreterMacroAssembler::notify_method_entry() {
 
 #if INCLUDE_TSAN
   if (ThreadSanitizer) {
-    NOT_LP64(get_thread(rthread);)
     call_VM(noreg, CAST_FROM_FN_PTR(address,
-                                    SharedRuntime::tsan_interp_method_entry),
-            rthread);
+                                    SharedRuntime::tsan_interp_method_entry));
   }
 #endif // INCLUDE_TSAN
 
