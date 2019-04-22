@@ -22,23 +22,36 @@
  * questions.
  */
 
-#include <jni.h>
-#include <pthread.h>
+/* @test NonRacyNativeLoopNativeSyncTest
+ * @summary Test that native code protected by native synchronization is not racy.
+ * @library /test/lib
+ * @build AbstractLoop AbstractNativeLoop TsanRunner
+ * @run main/othervm/native -XX:+ThreadSanitizer NonRacyNativeLoopNativeSyncTest
+ */
 
-int global;
-static pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
+import java.io.IOException;
+import jdk.test.lib.process.OutputAnalyzer;
+import jdk.test.lib.process.ProcessTools;
 
-JNIEXPORT void JNICALL Java_AbstractNativeLoop_writeNativeGlobalSync(JNIEnv *env, jobject obj) {
-  pthread_mutex_lock(&mutex);
-  global = 123;
-  pthread_mutex_unlock(&mutex);
+/**
+ * Test that TSAN doesn't report native code as racy
+ * when protected by Java synchronization.
+ */
+public class NonRacyNativeLoopNativeSyncTest {
+  public static void main(String[] args) throws IOException {
+    TsanRunner.runTsanTestExpectSuccess(NonRacyNativeLoopNativeSyncRunner.class);
+  }
 }
 
-JNIEXPORT void JNICALL Java_AbstractNativeLoop_writeNativeGlobal(JNIEnv *env, jobject obj) {
-  global = 123;
-}
+class NonRacyNativeLoopNativeSyncRunner extends AbstractNativeLoop {
+  @Override
+  protected void run(int i) {
+    writeNativeGlobalSync();
+  }
 
-JNIEXPORT jint JNICALL Java_AbstractNativeLoop_readNativeGlobal(JNIEnv *env, jobject obj) {
-  return global;
+  public static void main(String[] args) throws InterruptedException {
+    NonRacyNativeLoopNativeSyncRunner loop = new NonRacyNativeLoopNativeSyncRunner();
+    loop.runInTwoThreads();
+    System.out.format("native_global = %d\n", loop.readNativeGlobal());
+  }
 }
-

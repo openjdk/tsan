@@ -31,5 +31,6 @@ abstract class AbstractNativeLoop extends AbstractLoop {
   }
 
   protected native void writeNativeGlobal();
+  protected native void writeNativeGlobalSync();
   protected native int readNativeGlobal();
 }
