@@ -2545,7 +2545,11 @@ define_pd_global(uint64_t,MaxRAM,                    1ULL*G);
           "Use platform unstable time where supported for timestamps only") \
                                                                             \
   TSAN_ONLY(product(bool, ThreadSanitizer, false,                           \
-          "Detect data races with ThreadSanitizer"))
+          "Enable ThreadSanitizer lock instrumentation"))                   \
+                                                                            \
+  TSAN_ONLY(product(bool, ThreadSanitizerJavaMemory, true,                  \
+          "Detect Java data races with ThreadSanitizer. "                   \
+          "This is only enabled if -XX:+ThreadSanitizer is set."))
 
 #define VM_FLAGS(develop,                                                   \
                  develop_pd,                                                \

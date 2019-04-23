@@ -335,6 +335,20 @@ class SharedRuntime: AllStatic {
   static void tsan_interp_lock(JavaThread* thread, BasicObjectLock* elem);
   static void tsan_interp_unlock(JavaThread* thread, BasicObjectLock* elem);
 
+  // Address must point to an object in the Java heap.
+  static void tsan_acquire(void* address);
+  static void tsan_release(void* address);
+
+  // Memory reads/writes from code run by template interpreter
+  static void tsan_read1(void* addr, Method* method, address bcp);
+  static void tsan_read2(void* addr, Method* method, address bcp);
+  static void tsan_read4(void* addr, Method* method, address bcp);
+  static void tsan_read8(void* addr, Method* method, address bcp);
+  static void tsan_write1(void* addr, Method* method, address bcp);
+  static void tsan_write2(void* addr, Method* method, address bcp);
+  static void tsan_write4(void* addr, Method* method, address bcp);
+  static void tsan_write8(void* addr, Method* method, address bcp);
+
 #endif // INCLUDE_TSAN
 
   // Utility method for retrieving the Java thread id, returns 0 if the

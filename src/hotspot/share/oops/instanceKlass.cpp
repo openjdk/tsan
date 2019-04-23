@@ -85,6 +85,9 @@
 #if INCLUDE_JFR
 #include "jfr/jfrEvents.hpp"
 #endif
+#if INCLUDE_TSAN
+#include "runtime/sharedRuntime.hpp"
+#endif
 
 
 #ifdef DTRACE_ENABLED
@@ -688,6 +691,13 @@ void InstanceKlass::eager_initialize_impl() {
       set_init_state(old_state);
   } else {
     // linking successfull, mark class as initialized
+    TSAN_RUNTIME_ONLY(
+      // Construct a happens-before edge between the write of _init_state to
+      // fully_initialized and the later checking if it's initialized.
+      void* const lock_address = reinterpret_cast<void*>(
+          java_lang_Class::init_lock_addr(java_mirror()));
+      SharedRuntime::tsan_release(lock_address);
+    );
     set_init_state(fully_initialized);
     fence_and_clear_init_lock();
     // trace
@@ -709,6 +719,13 @@ void InstanceKlass::initialize(TRAPS) {
     //       OR it may be in the state of being initialized
     //       in case of recursive initialization!
   } else {
+    TSAN_RUNTIME_ONLY(
+      // Construct a happens-before edge between the write of _init_state to
+      // fully_initialized and here.
+      void* const lock_address = reinterpret_cast<void*>(
+          java_lang_Class::init_lock_addr(java_mirror()));
+      SharedRuntime::tsan_acquire(lock_address);
+    );
     assert(is_initialized(), "sanity check");
   }
 }
@@ -1069,6 +1086,13 @@ void InstanceKlass::set_initialization_state_and_notify(ClassState state, TRAPS)
   Handle h_init_lock(THREAD, init_lock());
   if (h_init_lock() != NULL) {
     ObjectLocker ol(h_init_lock, THREAD);
+    TSAN_RUNTIME_ONLY(
+      // Construct a happens-before edge between the write of _init_state to
+      // fully_initialized and the later checking if it's initialized.
+      void* const lock_address = reinterpret_cast<void*>(
+          java_lang_Class::init_lock_addr(java_mirror()));
+      SharedRuntime::tsan_release(lock_address);
+    );
     set_init_state(state);
     fence_and_clear_init_lock();
     ol.notify_all(CHECK);

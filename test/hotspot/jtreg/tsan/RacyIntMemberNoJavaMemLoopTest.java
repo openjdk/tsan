@@ -22,41 +22,39 @@
  * questions.
  */
 
-/* @test NonRawRacyNativeLoopTest
- * @summary Test that native code protected by JVMTI synchronization is not racy.
+/* @test RacyIntMemberNoJavaMemLoopTest
+ * @summary Test that a simple Java data race via an int member field is not
+ *          reported when ThreadSanitizerJavaMemory is off.
  * @library /test/lib
- * @build AbstractLoop AbstractNativeLoop TsanRunner
- * @run main/othervm/native NonRawRacyNativeLoopTest
+ * @build AbstractLoop TsanRunner
+ * @run main RacyIntMemberNoJavaMemLoopTest
  */
 
 import java.io.IOException;
+import jdk.test.lib.process.OutputAnalyzer;
+import jdk.test.lib.process.ProcessTools;
 
 /**
- * Test that TSAN doesn't report native code as racy when protected by Jvmti synchronization.
+ * Test a Java race on an integer member field.
  */
-public class NonRawRacyNativeLoopTest {
+public class RacyIntMemberNoJavaMemLoopTest {
   public static void main(String[] args) throws IOException {
-    TsanRunner.runTsanTestExpectSuccess(NonRawRacyNativeLoopRunner.class,
-        "-agentlib:AbstractNativeLoop");
+    TsanRunner.runTsanTestExpectSuccess(RacyIntMemberNoJavaMemLoopRunner.class,
+        "-XX:-ThreadSanitizerJavaMemory");
   }
 }
 
-class NonRawRacyNativeLoopRunner extends AbstractNativeLoop {
-  private long lock;
-
-  NonRawRacyNativeLoopRunner() {
-    // Both threads will use the same lock, so we should be not racy.
-    lock = createRawLock();
-  }
+class RacyIntMemberNoJavaMemLoopRunner extends AbstractLoop {
+  private int x = 0;
 
   @Override
   protected void run(int i) {
-    writeRawLockedNativeGlobal(lock);
+    x = x + 1;
   }
 
   public static void main(String[] args) throws InterruptedException {
-    NonRawRacyNativeLoopRunner loop = new NonRawRacyNativeLoopRunner();
+    RacyIntMemberNoJavaMemLoopRunner loop = new RacyIntMemberNoJavaMemLoopRunner();
     loop.runInTwoThreads();
-    System.out.format("native_global = %d\n", loop.readNativeGlobal());
+    System.out.format("x = %d\n", loop.x);
   }
 }

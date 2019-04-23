@@ -37,10 +37,8 @@ import java.lang.ThreadLocal;
  */
 public class RawRacyNativeLoopTest {
   public static void main(String[] args) throws IOException {
-    String[] agentArg = {
-      "-agentlib:AbstractNativeLoop",
-    };
-    TsanRunner.runTsanTestExpectFailure(RawRacyNativeLoopRunner.class, agentArg);
+    TsanRunner.runTsanTestExpectFailure(RawRacyNativeLoopRunner.class,
+        "-agentlib:AbstractNativeLoop");
   }
 }
 

@@ -38,22 +38,9 @@ import jdk.test.lib.process.ProcessTools;
  */
 public class RacyIntMemberLoopTest {
   public static void main(String[] args) throws IOException {
-    boolean caught = false;
-
-    try {
-      TsanRunner.runTsanTestExpectFailure(RacyIntMemberLoopRunner.class)
-          .shouldMatch("(Read|Write) of size 4 at 0x[0-9a-fA-F]+ by thread T[0-9]+")
-          .shouldContain(" #0 com.google.devtools.java.tsan.RacyIntMemberLoopTest.run(I)V "
-              + "RacyIntMemberLoopTest.java:");
-    } catch (RuntimeException e) {
-      // We expect it to fail for now: until TSAN is up and running, we should not be passing this
-      // test and will throw a RuntimeException instead.
-      caught = true;
-    }
-
-    if (!caught) {
-      throw new RuntimeException("Passed unexpectedly.");
-    }
+    TsanRunner.runTsanTestExpectFailure(RacyIntMemberLoopRunner.class)
+        .shouldMatch("(Read|Write) of size 4 at 0x[0-9a-fA-F]+ by thread T[0-9]+")
+        .shouldContain(" #0 RacyIntMemberLoopRunner.run(I)V RacyIntMemberLoopTest.java:");
   }
 }
 

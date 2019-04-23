@@ -36,10 +36,8 @@ import java.io.IOException;
  */
 public class JvmtiTaggerTest {
   public static void main(String[] args) throws IOException {
-    String[] agentArg = {
-      "-agentlib:AbstractNativeLoop",
-    };
-    TsanRunner.runTsanTestExpectSuccess(JvmtiTaggerLoopRunner.class, agentArg);
+    TsanRunner.runTsanTestExpectSuccess(JvmtiTaggerLoopRunner.class,
+        "-agentlib:AbstractNativeLoop");
   }
 }
 

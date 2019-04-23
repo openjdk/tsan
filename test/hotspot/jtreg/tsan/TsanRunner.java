@@ -33,7 +33,7 @@ import jdk.test.lib.process.ProcessTools;
  * ProcessBuilder; returning the OutputAnalyzer of the process.
  */
 public class TsanRunner {
-  private static OutputAnalyzer runTsanTest(Class<?> klass, String[] vmArgs) throws IOException {
+  private static OutputAnalyzer runTsanTest(Class<?> klass, String... vmArgs) throws IOException {
     ArrayList<String> vmOpts = new ArrayList<>();
 
     String testVmOptsStr = System.getProperty("test.java.opts");
@@ -46,19 +46,19 @@ public class TsanRunner {
     vmOpts.add(klass.getName());
 
     ProcessBuilder pb =
-        ProcessTools.createJavaProcessBuilder(vmOpts.toArray(new String[vmOpts.size()]));
+        ProcessTools.createJavaProcessBuilder(vmOpts.toArray(new String[0]));
     return new OutputAnalyzer(pb.start());
   }
 
   public static OutputAnalyzer runTsanTestExpectSuccess(
-      Class<?> klass, String[] vmArgs) throws IOException {
+      Class<?> klass, String... vmArgs) throws IOException {
     return runTsanTest(klass, vmArgs)
         .shouldHaveExitValue(0)
         .shouldNotContain("WARNING: ThreadSanitizer: data race");
   }
 
   public static OutputAnalyzer runTsanTestExpectFailure(
-      Class<?> klass, String[] vmArgs) throws IOException {
+      Class<?> klass, String... vmArgs) throws IOException {
     return runTsanTest(klass, vmArgs)
         .shouldHaveExitValue(66);
   }

@@ -69,6 +69,17 @@ extern "C" {
       const volatile void *lock, long is_w) WEAK;
   void AnnotateRWLockReleased(const char *file, int line,
       const volatile void *lock, long is_w) WEAK;
+
+  // Memory accesses.
+  void __tsan_read1_pc(void *addr, void *pc) WEAK;
+  void __tsan_read2_pc(void *addr, void *pc) WEAK;
+  void __tsan_read4_pc(void *addr, void *pc) WEAK;
+  void __tsan_read8_pc(void *addr, void *pc) WEAK;
+
+  void __tsan_write1_pc(void *addr, void *pc) WEAK;
+  void __tsan_write2_pc(void *addr, void *pc) WEAK;
+  void __tsan_write4_pc(void *addr, void *pc) WEAK;
+  void __tsan_write8_pc(void *addr, void *pc) WEAK;
 }
 
 #endif  // SHARE_TSAN_TSANEXTERNALDECLS_HPP

@@ -3850,8 +3850,15 @@ jint Arguments::parse(const JavaVMInitArgs* initial_cmd_args) {
   no_shared_spaces("CDS Disabled");
 #endif // INCLUDE_CDS
 
-  // Currently TSAN is only implemented for interpreter.
-  TSAN_RUNTIME_ONLY(set_mode_flags(_int));
+  TSAN_RUNTIME_ONLY(
+    // Currently TSAN is only implemented for interpreter.
+    set_mode_flags(_int);
+    // TSAN instrumentation is not implemented for the RewriteBytecodes
+    // code paths because TSAN slows down the application so much that the
+    // performance benefits from rewriting bytecodes is negligible.
+    FLAG_SET_ERGO(bool, RewriteBytecodes, false);
+    FLAG_SET_ERGO(bool, RewriteFrequentPairs, false);
+  );
 
   return JNI_OK;
 }

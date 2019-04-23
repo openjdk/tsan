@@ -1143,6 +1143,46 @@ JRT_LEAF(void, SharedRuntime::tsan_interp_unlock(JavaThread* thread,
   DEBUG_ONLY(thread->last_frame().interpreter_frame_verify_monitor(elem);)
 JRT_END
 
+// TODO: Make tsan_acquire/release JRT_LEAF
+// Currently it can't be JRT_LEAF because there are calls from the VM
+// (instanceKlass.cpp), and JRT_LEAF only allows calls from Java/native code.
+// We need to figure out a better way of being able to call TSAN functions from
+// the VM.
+void SharedRuntime::tsan_acquire(void* address) {
+  DEBUG_ONLY(NoSafepointVerifier nsv;)
+  assert(ThreadSanitizer, "Need -XX:+ThreadSanitizer");
+  assert(address != NULL, "Cannot acquire at address 0");
+  __tsan_java_acquire(address);
+}
+
+void SharedRuntime::tsan_release(void* address) {
+  DEBUG_ONLY(NoSafepointVerifier nsv;)
+  assert(ThreadSanitizer, "Need -XX:+ThreadSanitizer");
+  assert(address != NULL, "Cannot release at address 0");
+  __tsan_java_release(address);
+}
+
+#define TSAN_MEMORY_ACCESS(name)                                               \
+  JRT_LEAF(void, SharedRuntime::tsan_##name(                                   \
+      void* addr,                                                              \
+      Method* method,                                                          \
+      address bcp))                                                            \
+    assert(ThreadSanitizer, "Need -XX:+ThreadSanitizer");                      \
+    assert(ThreadSanitizerJavaMemory, "Need -XX:+ThreadSanitizerJavaMemory");  \
+    jmethodID mid = method->find_jmethod_id_or_null();                         \
+    int bci = method->bci_from(bcp);                                           \
+    __tsan_##name##_pc(addr, tsan_code_location(mid, bci));                    \
+  JRT_END
+
+TSAN_MEMORY_ACCESS(read1)
+TSAN_MEMORY_ACCESS(read2)
+TSAN_MEMORY_ACCESS(read4)
+TSAN_MEMORY_ACCESS(read8)
+TSAN_MEMORY_ACCESS(write1)
+TSAN_MEMORY_ACCESS(write2)
+TSAN_MEMORY_ACCESS(write4)
+TSAN_MEMORY_ACCESS(write8)
+
 #endif // INCLUDE_TSAN
 
 // Finds receiver, CallInfo (i.e. receiver method), and calling bytecode)

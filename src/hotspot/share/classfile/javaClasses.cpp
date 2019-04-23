@@ -1302,6 +1302,14 @@ oop java_lang_Class::init_lock(oop java_class) {
   assert(_init_lock_offset != 0, "must be set");
   return java_class->obj_field(_init_lock_offset);
 }
+
+#if INCLUDE_TSAN
+oop* java_lang_Class::init_lock_addr(oop java_class) {
+  assert(_init_lock_offset != 0, "must be set");
+  return java_class->obj_field_addr_raw<oop>(_init_lock_offset);
+}
+#endif  // INCLUDE_TSAN
+
 void java_lang_Class::set_init_lock(oop java_class, oop init_lock) {
   assert(_init_lock_offset != 0, "must be set");
   java_class->obj_field_put(_init_lock_offset, init_lock);

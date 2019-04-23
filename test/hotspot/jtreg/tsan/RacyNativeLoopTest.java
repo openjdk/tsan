@@ -40,7 +40,8 @@ public class RacyNativeLoopTest {
   public static void main(String[] args) throws IOException {
     TsanRunner.runTsanTestExpectFailure(RacyNativeLoopRunner.class)
         .shouldMatch("Write of size 4 at 0x[0-9a-fA-F]+ by thread T[0-9]+")
-        .shouldContain(" #0 Java_AbstractNativeLoop_writeNativeGlobal");
+        .shouldContain(" #0 Java_AbstractNativeLoop_writeNativeGlobal")
+        .shouldContain(" #2 RacyNativeLoopRunner.run(I)V RacyNativeLoopTest.java:");
   }
 }
 

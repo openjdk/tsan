@@ -309,6 +309,10 @@ class java_lang_Class : AllStatic {
   // Support for embedded per-class oops
   static oop  protection_domain(oop java_class);
   static oop  init_lock(oop java_class);
+#if INCLUDE_TSAN
+  static oop* init_lock_addr(oop java_class);
+  static const int* init_lock_offset_addr() { return &_init_lock_offset; }
+#endif  // INCLUDE_TSAN
   static oop  component_mirror(oop java_class);
   static objArrayOop  signers(oop java_class);
   static void set_signers(oop java_class, objArrayOop signers);
