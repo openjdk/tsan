@@ -75,13 +75,11 @@ static void TsanSymbolizeMethod(Method* m, u2 bci, AddFrameFunc add_frame,
       ctx, methodname_buf, filename_buf, m->line_number_from_bci(bci), -1);
 }
 
+extern "C" {
 // TSAN calls this to symbolize Java frames.
-// This is not in tsanExternalDecls.hpp because this is a function that the JVM
-// is supposed to override which TSAN will call, not a TSAN function that the
-// JVM calls.
-extern "C" void __tsan_symbolize_external_ex(julong loc,
-                                             AddFrameFunc add_frame,
-                                             void *ctx) {
+JNIEXPORT void TsanSymbolize(julong loc,
+                             AddFrameFunc add_frame,
+                             void *ctx) {
   DEBUG_ONLY(NoSafepointVerifier nsv;)
   DEBUG_ONLY(NoAllocVerifier nav;)
   assert(ThreadSanitizer, "Need -XX:+ThreadSanitizer");
@@ -102,6 +100,7 @@ extern "C" void __tsan_symbolize_external_ex(julong loc,
   } else {
     add_frame(ctx, "(Deleted method)", NULL, -1, -1);
   }
+}
 }
 
 void TsanRawLockAcquired(const char *file, int line,

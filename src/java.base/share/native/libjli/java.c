@@ -213,6 +213,14 @@ static jlong initialHeapSize    = 0;  /* inital heap size */
 #define STACK_SIZE_MINIMUM (64 * KB)
 #endif
 
+#ifdef INCLUDE_TSAN
+/*
+ * Function pointer to JVM's TSAN symbolize function.
+ */
+__attribute__((visibility("default")))
+TsanSymbolize_t tsan_symbolize_func = NULL;
+#endif
+
 /*
  * Entry point.
  */
@@ -292,6 +300,9 @@ JLI_Launch(int argc, char ** argv,              /* main argc, argv */
     if (!LoadJavaVM(jvmpath, &ifn)) {
         return(6);
     }
+#ifdef INCLUDE_TSAN
+    tsan_symbolize_func = ifn.TsanSymbolize;
+#endif
 
     if (JLI_IsTraceLauncher()) {
         end   = CounterGet();

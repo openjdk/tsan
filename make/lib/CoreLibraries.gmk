@@ -193,6 +193,10 @@ endif
 
 LIBJLI_CFLAGS += $(LIBZ_CFLAGS)
 
+ifeq ($(INCLUDE_TSAN), true)
+  LIBJLI_CFLAGS += -DINCLUDE_TSAN
+endif
+
 ifneq ($(USE_EXTERNAL_LIBZ), true)
   LIBJLI_EXTRA_FILES += \
       $(addprefix $(TOPDIR)/src/java.base/share/native/libzip/zlib/, \

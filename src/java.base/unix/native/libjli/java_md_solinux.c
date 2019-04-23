@@ -626,6 +626,15 @@ LoadJavaVM(const char *jvmpath, InvocationFunctions *ifn)
         return JNI_FALSE;
     }
 
+#ifdef INCLUDE_TSAN
+    ifn->TsanSymbolize = (TsanSymbolize_t)
+        dlsym(libjvm, "TsanSymbolize");
+    if (ifn->TsanSymbolize == NULL) {
+        JLI_ReportErrorMessage(DLL_ERROR2, jvmpath, dlerror());
+        return JNI_FALSE;
+    }
+#endif
+
     return JNI_TRUE;
 }
 

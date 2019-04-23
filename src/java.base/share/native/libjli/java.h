@@ -73,6 +73,13 @@
 #define SPLASH_JAR_ENV_ENTRY "_JAVA_SPLASH_JAR"
 #define JDK_JAVA_OPTIONS "JDK_JAVA_OPTIONS"
 
+#ifdef INCLUDE_TSAN
+typedef void (*TsanSymbolizeAddFrameFunc)(
+    void *ctx, const char *function, const char *file, int line, int column);
+typedef void (JNICALL *TsanSymbolize_t)(uint64_t, TsanSymbolizeAddFrameFunc, void *);
+extern TsanSymbolize_t tsan_symbolize_func;
+#endif
+
 /*
  * Pointers to the needed JNI invocation API, initialized by LoadJavaVM.
  */
@@ -84,6 +91,9 @@ typedef struct {
     CreateJavaVM_t CreateJavaVM;
     GetDefaultJavaVMInitArgs_t GetDefaultJavaVMInitArgs;
     GetCreatedJavaVMs_t GetCreatedJavaVMs;
+#ifdef INCLUDE_TSAN
+    TsanSymbolize_t TsanSymbolize;
+#endif
 } InvocationFunctions;
 
 JNIEXPORT int JNICALL
