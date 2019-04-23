@@ -26,7 +26,7 @@
  * @summary Test a simple native data race.
  * @library /test/lib
  * @build AbstractLoop AbstractNativeLoop TsanRunner
- * @run main/othervm/native -XX:+ThreadSanitizer RacyNativeLoopTest
+ * @run main/othervm/native RacyNativeLoopTest
  */
 
 import java.io.IOException;

@@ -26,7 +26,7 @@
  * @summary Test that native code protected by native synchronization is not racy.
  * @library /test/lib
  * @build AbstractLoop AbstractNativeLoop TsanRunner
- * @run main/othervm/native -XX:+ThreadSanitizer NonRacyNativeLoopNativeSyncTest
+ * @run main/othervm/native NonRacyNativeLoopNativeSyncTest
  */
 
 import java.io.IOException;

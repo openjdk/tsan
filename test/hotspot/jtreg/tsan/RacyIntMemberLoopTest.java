@@ -26,7 +26,7 @@
  * @summary Test a simple Java data race via an int member field.
  * @library /test/lib
  * @build AbstractLoop TsanRunner
- * @run main/othervm -XX:+ThreadSanitizer RacyIntMemberLoopTest
+ * @run main RacyIntMemberLoopTest
  */
 
 import java.io.IOException;

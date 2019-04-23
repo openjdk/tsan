@@ -41,6 +41,7 @@ public class TsanRunner {
       String[] testVmOpts = testVmOptsStr.split(" ");
       Collections.addAll(vmOpts, testVmOpts);
     }
+    vmOpts.add("-XX:+ThreadSanitizer");
     vmOpts.add(klass.getName());
 
     ProcessBuilder pb =
