@@ -30,7 +30,10 @@ abstract class AbstractNativeLoop extends AbstractLoop {
     System.loadLibrary("AbstractNativeLoop");
   }
 
-  protected native void writeNativeGlobal();
-  protected native void writeNativeGlobalSync();
-  protected native int readNativeGlobal();
+  protected static native void writeNativeGlobal();
+  protected static native void writeNativeGlobalSync();
+  protected static native int readNativeGlobal();
+
+  protected static native long createRawLock();
+  protected static native void writeRawLockedNativeGlobal(long lock);
 }

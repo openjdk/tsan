@@ -58,6 +58,9 @@
 #include "runtime/vframe.hpp"
 #include "runtime/vmThread.hpp"
 #include "runtime/vmOperations.hpp"
+#if INCLUDE_TSAN
+#include "tsan/tsan.hpp"
+#endif  // INCLUDE_TSAN
 #include "utilities/macros.hpp"
 #if INCLUDE_ZGC
 #include "gc/z/zGlobals.hpp"
@@ -379,6 +382,22 @@ class JvmtiTagHashmap : public CHeapObj<mtInternal> {
   void entry_iterate(JvmtiTagHashmapEntryClosure* closure);
 };
 
+// Tsan should know that the JVMTI TagMap is protected by a mutex.
+class TsanMutexScope : public StackObj {
+ private:
+  Monitor *_lock;  // Keep my own reference, for destructor.
+
+ public:
+  // Don't actually lock it, just tell tsan we did.
+  TsanMutexScope(Monitor* mutex) : _lock(mutex) {
+    TSAN_RAW_LOCK_ACQUIRED(_lock);
+  }
+
+  ~TsanMutexScope() {
+    TSAN_RAW_LOCK_RELEASED(_lock);
+  }
+};
+
 // possible hashmap sizes - odd primes that roughly double in size.
 // To avoid excessive resizing the odd primes from 4801-76831 and
 // 76831-307261 have been removed. The list must be terminated by -1.
@@ -447,6 +466,24 @@ JvmtiTagMap::JvmtiTagMap(JvmtiEnv* env) :
   assert(JvmtiThreadState_lock->is_locked(), "sanity check");
   assert(((JvmtiEnvBase *)env)->tag_map() == NULL, "tag map already exists for environment");
 
+  // TSAN Note: we cannot tell TSAN about the creation of this lock due to
+  // this being seen as racy though is not really.
+  //
+  // The JvmtiTagMap gets created by the first thread to call tag_map_for; which
+  // uses a lock to create it if need be.
+  //
+  // This means that this lock is created under a mutex but then,
+  // subsequent uses do not have a lock to protect it (because not
+  // needed in this case), however TSAN sees it as being needed because:
+  //  - Another thread can come and get the newly created JvmtiTagMap without a
+  //  lock and acquire the lock.
+  //  - This provokes a race for TSAN on the lock itself, though there is no
+  //  real issue.
+  //
+  //  Not creating the lock or having a fence mechanism to tell TSAN this is
+  //  safe (a fake lock around this lock for example) seem to be the only
+  //  solutions.
+
   _hashmap = new JvmtiTagHashmap();
 
   // finally add us to the environment
@@ -456,7 +493,6 @@ JvmtiTagMap::JvmtiTagMap(JvmtiEnv* env) :
 
 // destroy a JvmtiTagMap
 JvmtiTagMap::~JvmtiTagMap() {
-
   // no lock acquired as we assume the enclosing environment is
   // also being destroryed.
   ((JvmtiEnvBase *)_env)->set_tag_map(NULL);
@@ -483,6 +519,8 @@ JvmtiTagMap::~JvmtiTagMap() {
     entry = next;
   }
   _free_entries = NULL;
+
+  // TSAN Note: see above for the Tsan creation note.
 }
 
 // create a hashmap entry
@@ -729,6 +767,7 @@ class TwoOopCallbackWrapper : public CallbackWrapper {
 // tag map will be a hot lock.
 void JvmtiTagMap::set_tag(jobject object, jlong tag) {
   MutexLocker ml(lock());
+  TSAN_ONLY(TsanMutexScope tms(lock()));
 
   // resolve the object
   oop o = JNIHandles::resolve_non_null(object);
@@ -761,6 +800,7 @@ void JvmtiTagMap::set_tag(jobject object, jlong tag) {
 // get the tag for an object
 jlong JvmtiTagMap::get_tag(jobject object) {
   MutexLocker ml(lock());
+  TSAN_ONLY(TsanMutexScope tms(lock()));
 
   // resolve the object
   oop o = JNIHandles::resolve_non_null(object);
@@ -1260,11 +1300,22 @@ static jint invoke_primitive_field_callback_for_instance_fields(
 class VM_HeapIterateOperation: public VM_Operation {
  private:
   ObjectClosure* _blk;
+  JvmtiTagMap* _tag_map;
+
  public:
-  VM_HeapIterateOperation(ObjectClosure* blk) { _blk = blk; }
+  VM_HeapIterateOperation(ObjectClosure* blk, JvmtiTagMap* tag_map) {
+    _blk = blk;
+    _tag_map = tag_map;
+  }
 
   VMOp_Type type() const { return VMOp_HeapIterateOperation; }
   void doit() {
+    // Simulates barrier synchronization on safepoint.
+    // This annotation is reasonably minimal in number of tsan callbacks.
+    // By passing the lock directly, we are not actually locking it, just
+    // telling TSAN we are to "simulate" the lock.
+    TSAN_ONLY(TsanMutexScope tms(_tag_map->lock()));
+
     // allows class files maps to be cached during iteration
     ClassFieldMapCacheMark cm;
 
@@ -1494,7 +1545,7 @@ void JvmtiTagMap::iterate_over_heap(jvmtiHeapObjectFilter object_filter,
                                    object_filter,
                                    heap_object_callback,
                                    user_data);
-  VM_HeapIterateOperation op(&blk);
+  VM_HeapIterateOperation op(&blk, this);
   VMThread::execute(&op);
 }
 
@@ -1511,7 +1562,7 @@ void JvmtiTagMap::iterate_through_heap(jint heap_filter,
                                       heap_filter,
                                       callbacks,
                                       user_data);
-  VM_HeapIterateOperation op(&blk);
+  VM_HeapIterateOperation op(&blk, this);
   VMThread::execute(&op);
 }
 
@@ -1607,6 +1658,7 @@ jvmtiError JvmtiTagMap::get_objects_with_tags(const jlong* tags,
   {
     // iterate over all tagged objects
     MutexLocker ml(lock());
+    TSAN_ONLY(TsanMutexScope tms(lock()));
     entry_iterate(&collector);
   }
   return collector.result(count_ptr, object_result_ptr, tag_result_ptr);
@@ -3219,6 +3271,11 @@ bool VM_HeapWalkOperation::visit(oop o) {
 }
 
 void VM_HeapWalkOperation::doit() {
+  // This annotation is reasonably minimal in number of tsan callbacks.
+  // By passing the lock directly, we are not actually locking it, just
+  // telling TSAN we are to "simulate" the lock.
+  TSAN_ONLY(TsanMutexScope tms(_tag_map->lock()));
+
   ResourceMark rm;
   ObjectMarkerController marker;
   ClassFieldMapCacheMark cm;

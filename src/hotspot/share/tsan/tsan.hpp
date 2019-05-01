@@ -1,0 +1,57 @@
+/*
+ * Copyright (c) 2019, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2019, Google and/or its affiliates. All rights reserved.
+ * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
+ *
+ * This code is free software; you can redistribute it and/or modify it
+ * under the terms of the GNU General Public License version 2 only, as
+ * published by the Free Software Foundation.
+ *
+ * This code is distributed in the hope that it will be useful, but WITHOUT
+ * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+ * FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+ * version 2 for more details (a copy is included in the LICENSE file that
+ * accompanied this code).
+ *
+ * You should have received a copy of the GNU General Public License version
+ * 2 along with this work; if not, write to the Free Software Foundation,
+ * Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301 USA.
+ *
+ * Please contact Oracle, 500 Oracle Parkway, Redwood Shores, CA 94065 USA
+ * or visit www.oracle.com if you need additional information or have any
+ * questions.
+ *
+ */
+
+#ifndef SHARE_TSAN_TSAN_HPP
+#define SHARE_TSAN_TSAN_HPP
+
+#if INCLUDE_TSAN
+#define TSAN_RUNTIME_ONLY(code) \
+    do { \
+      if (ThreadSanitizer) { \
+        code; \
+      } \
+    } while (0)
+#else
+#define TSAN_RUNTIME_ONLY(code)
+#endif
+
+void TsanRawLockCreate(const char *file, int line, const volatile void *lock);
+void TsanRawLockDestroy(const char *file, int line, const volatile void *lock);
+void TsanRawLockAcquired(const char *file, int line, const volatile void *lock);
+void TsanRawLockReleased(const char *file, int line, const volatile void *lock);
+
+#define TSAN_RAW_LOCK_CREATE(lock) \
+  TSAN_RUNTIME_ONLY(TsanRawLockCreate(__FILE__, __LINE__, lock))
+
+#define TSAN_RAW_LOCK_DESTROY(lock) \
+  TSAN_RUNTIME_ONLY(TsanRawLockDestroy(__FILE__, __LINE__, lock))
+
+#define TSAN_RAW_LOCK_ACQUIRED(lock) \
+  TSAN_RUNTIME_ONLY(TsanRawLockAcquired(__FILE__, __LINE__, lock))
+
+#define TSAN_RAW_LOCK_RELEASED(lock) \
+  TSAN_RUNTIME_ONLY(TsanRawLockReleased(__FILE__, __LINE__, lock))
+
+#endif  // SHARE_TSAN_TSAN_HPP

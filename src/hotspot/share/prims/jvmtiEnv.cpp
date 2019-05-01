@@ -72,6 +72,9 @@
 #include "runtime/vframe.inline.hpp"
 #include "runtime/vmThread.hpp"
 #include "services/threadService.hpp"
+#if INCLUDE_TSAN
+#include "tsan/tsan.hpp"
+#endif  // INCLUDE_TSAN
 #include "utilities/exceptions.hpp"
 #include "utilities/preserveException.hpp"
 
@@ -3211,6 +3214,10 @@ JvmtiEnv::IsMethodObsolete(Method* method_oop, jboolean* is_obsolete_ptr) {
   // Raw Monitor functions
   //
 
+// Tsan note: The JVMTI raw monitors are instrumented at JvmtiRawMonitor call
+// sites instead of inside the JvmtiRawMonitor implementation. This seems
+// cleaner, and mirrors instrumentation of JVM_RawMonitor* functions.
+
 // name - pre-checked for NULL
 // monitor_ptr - pre-checked for NULL
 jvmtiError
@@ -3219,6 +3226,8 @@ JvmtiEnv::CreateRawMonitor(const char* name, jrawMonitorID* monitor_ptr) {
   NULL_CHECK(rmonitor, JVMTI_ERROR_OUT_OF_MEMORY);
 
   *monitor_ptr = (jrawMonitorID)rmonitor;
+
+  TSAN_RAW_LOCK_CREATE(rmonitor);
 
   return JVMTI_ERROR_NONE;
 } /* end CreateRawMonitor */
@@ -3242,6 +3251,7 @@ JvmtiEnv::DestroyRawMonitor(JvmtiRawMonitor * rmonitor) {
       int r;
       intptr_t recursion = rmonitor->recursions();
       for (intptr_t i = 0; i <= recursion; i++) {
+        TSAN_RAW_LOCK_RELEASED(rmonitor);
         r = rmonitor->raw_exit(thread);
         assert(r == ObjectMonitor::OM_OK, "raw_exit should have worked");
         if (r != ObjectMonitor::OM_OK) {  // robustness
@@ -3260,6 +3270,7 @@ JvmtiEnv::DestroyRawMonitor(JvmtiRawMonitor * rmonitor) {
     }
   }
 
+  TSAN_RAW_LOCK_DESTROY(rmonitor);
   delete rmonitor;
 
   return JVMTI_ERROR_NONE;
@@ -3324,6 +3335,7 @@ JvmtiEnv::RawMonitorEnter(JvmtiRawMonitor * rmonitor) {
     if (r != ObjectMonitor::OM_OK) {  // robustness
       return JVMTI_ERROR_INTERNAL;
     }
+    TSAN_RAW_LOCK_ACQUIRED(rmonitor);
   }
   return JVMTI_ERROR_NONE;
 } /* end RawMonitorEnter */
@@ -3343,6 +3355,8 @@ JvmtiEnv::RawMonitorExit(JvmtiRawMonitor * rmonitor) {
   } else {
     int r = 0;
     Thread* thread = Thread::current();
+
+    TSAN_RAW_LOCK_RELEASED(rmonitor);
 
     if (thread->is_Java_thread()) {
       JavaThread* current_thread = (JavaThread*)thread;
@@ -3377,6 +3391,10 @@ jvmtiError
 JvmtiEnv::RawMonitorWait(JvmtiRawMonitor * rmonitor, jlong millis) {
   int r = 0;
   Thread* thread = Thread::current();
+
+  // A wait is modeled in Tsan as a simple release-acquire pair.
+  // The matching release annotation is below.
+  TSAN_RAW_LOCK_RELEASED(rmonitor);
 
   if (thread->is_Java_thread()) {
     JavaThread* current_thread = (JavaThread*)thread;
@@ -3415,6 +3433,10 @@ JvmtiEnv::RawMonitorWait(JvmtiRawMonitor * rmonitor, jlong millis) {
       ShouldNotReachHere();
     }
   }
+
+  // A wait is modeled in Tsan as a simple release-acquire pair.
+  // The matching acquire annotation is above.
+  TSAN_RAW_LOCK_ACQUIRED(rmonitor);
 
   switch (r) {
   case ObjectMonitor::OM_INTERRUPTED:

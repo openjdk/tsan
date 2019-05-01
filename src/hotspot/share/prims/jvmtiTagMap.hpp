@@ -56,7 +56,6 @@ class JvmtiTagMap :  public CHeapObj<mtInternal> {
   JvmtiTagMap(JvmtiEnv* env);
 
   // accessors
-  inline Mutex* lock()                      { return &_lock; }
   inline JvmtiEnv* env() const              { return _env; }
 
   void do_weak_oops(BoolObjectClosure* is_alive, OopClosure* f);
@@ -65,6 +64,8 @@ class JvmtiTagMap :  public CHeapObj<mtInternal> {
   void entry_iterate(JvmtiTagHashmapEntryClosure* closure);
 
  public:
+
+  inline Mutex* lock()                      { return &_lock; }
 
   // indicates if this tag map is locked
   bool is_locked()                          { return lock()->is_locked(); }

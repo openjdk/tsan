@@ -104,3 +104,20 @@ extern "C" void __tsan_symbolize_external_ex(julong loc,
   }
 }
 
+void TsanRawLockAcquired(const char *file, int line,
+                         const volatile void *lock) {
+  AnnotateRWLockAcquired(file, line, lock, 1);
+}
+
+void TsanRawLockReleased(const char *file, int line,
+                         const volatile void *lock) {
+  AnnotateRWLockReleased(file, line, lock, 1);
+}
+
+void TsanRawLockCreate(const char *file, int line, const volatile void *lock) {
+  AnnotateRWLockCreate(file, line, lock);
+}
+
+void TsanRawLockDestroy(const char *file, int line, const volatile void *lock) {
+  AnnotateRWLockDestroy(file, line, lock);
+}

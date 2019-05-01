@@ -79,6 +79,9 @@
 #include "services/attachListener.hpp"
 #include "services/management.hpp"
 #include "services/threadService.hpp"
+#if INCLUDE_TSAN
+#include "tsan/tsan.hpp"
+#endif  // INCLUDE_TSAN
 #include "utilities/copy.hpp"
 #include "utilities/defaultStream.hpp"
 #include "utilities/dtrace.hpp"
@@ -3382,13 +3385,16 @@ JVM_END
 JNIEXPORT void* JNICALL JVM_RawMonitorCreate(void) {
   VM_Exit::block_if_vm_exited();
   JVMWrapper("JVM_RawMonitorCreate");
-  return new Mutex(Mutex::native, "JVM_RawMonitorCreate");
+  void *mon = new Mutex(Mutex::native, "JVM_RawMonitorCreate");
+  TSAN_RAW_LOCK_CREATE(mon);
+  return mon;
 }
 
 
 JNIEXPORT void JNICALL  JVM_RawMonitorDestroy(void *mon) {
   VM_Exit::block_if_vm_exited();
   JVMWrapper("JVM_RawMonitorDestroy");
+  TSAN_RAW_LOCK_DESTROY(mon);
   delete ((Mutex*) mon);
 }
 
@@ -3397,6 +3403,7 @@ JNIEXPORT jint JNICALL JVM_RawMonitorEnter(void *mon) {
   VM_Exit::block_if_vm_exited();
   JVMWrapper("JVM_RawMonitorEnter");
   ((Mutex*) mon)->jvm_raw_lock();
+  TSAN_RAW_LOCK_ACQUIRED(mon);
   return 0;
 }
 
@@ -3404,6 +3411,7 @@ JNIEXPORT jint JNICALL JVM_RawMonitorEnter(void *mon) {
 JNIEXPORT void JNICALL JVM_RawMonitorExit(void *mon) {
   VM_Exit::block_if_vm_exited();
   JVMWrapper("JVM_RawMonitorExit");
+  TSAN_RAW_LOCK_RELEASED(mon);
   ((Mutex*) mon)->jvm_raw_unlock();
 }
 

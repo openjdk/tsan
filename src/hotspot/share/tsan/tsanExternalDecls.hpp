@@ -61,6 +61,15 @@ extern "C" {
   // More primitive lock notification for internal VM double-checked locking.
   void __tsan_java_acquire(void* address) WEAK;
   void __tsan_java_release(void* address) WEAK;
+
+  void AnnotateRWLockCreate(const char *file, int line,
+      const volatile void *lock) WEAK;
+  void AnnotateRWLockDestroy(const char *file, int line,
+      const volatile void *lock) WEAK;
+  void AnnotateRWLockAcquired(const char *file, int line,
+      const volatile void *lock, long is_w) WEAK;
+  void AnnotateRWLockReleased(const char *file, int line,
+      const volatile void *lock, long is_w) WEAK;
 }
 
 #endif  // SHARE_TSAN_TSANEXTERNALDECLS_HPP

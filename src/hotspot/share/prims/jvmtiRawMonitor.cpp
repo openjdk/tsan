@@ -29,6 +29,9 @@
 #include "runtime/interfaceSupport.inline.hpp"
 #include "runtime/orderAccess.hpp"
 #include "runtime/thread.inline.hpp"
+#if INCLUDE_TSAN
+#include "tsan/tsan.hpp"
+#endif  // INCLUDE_TSAN
 
 GrowableArray<JvmtiRawMonitor*> *JvmtiPendingMonitors::_monitors = new (ResourceObj::C_HEAP, mtInternal) GrowableArray<JvmtiRawMonitor*>(1,true);
 
@@ -44,6 +47,7 @@ is running. Raw monitor transition will not work");
       JvmtiRawMonitor *rmonitor = monitors()->at(i);
       int r = rmonitor->raw_enter(current_java_thread);
       assert(r == ObjectMonitor::OM_OK, "raw_enter should have worked");
+      TSAN_RAW_LOCK_ACQUIRED(rmonitor);
     }
   }
   // pending monitors are converted to real monitor so delete them all.
