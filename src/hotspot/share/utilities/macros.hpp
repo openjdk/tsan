@@ -289,8 +289,15 @@
 
 #if INCLUDE_TSAN
 #define TSAN_ONLY(code) code
+#define TSAN_RUNTIME_ONLY(code) \
+    do { \
+      if (ThreadSanitizer) { \
+        code; \
+      } \
+    } while (0)
 #else
 #define TSAN_ONLY(code)
+#define TSAN_RUNTIME_ONLY(code)
 #endif
 
 #ifndef INCLUDE_JVMCI

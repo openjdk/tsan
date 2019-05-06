@@ -35,8 +35,7 @@
 // they are "push" functions.
 //
 // These functions must be declared as "weak" symbols: the function
-// definitions are available only when the Tsan runtime is available, such as
-// LD_PRELOAD or statically linking libtsan.
+// definitions are available only when the native Tsan library is loaded.
 extern "C" {
   // Called after Java heap is set up.
   // It must be called before any other __tsan_java_* function.

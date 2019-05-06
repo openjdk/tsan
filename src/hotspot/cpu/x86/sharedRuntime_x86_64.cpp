@@ -2416,16 +2416,14 @@ nmethod* SharedRuntime::generate_native_wrapper(MacroAssembler* masm,
     restore_args(masm, total_c_args, c_arg, out_regs);
   }
 
-#if INCLUDE_TSAN
-  if (ThreadSanitizer) {
+  TSAN_RUNTIME_ONLY(
     // protect the args we've loaded
     save_args(masm, total_c_args, c_arg, out_regs);
     __ call_VM(noreg,
       CAST_FROM_FN_PTR(address, SharedRuntime::tsan_interp_method_entry),
       r15_thread);
     restore_args(masm, total_c_args, c_arg, out_regs);
-  }
-#endif // INCLUDE_TSAN
+  );
 
   // RedefineClasses() tracing support for obsolete method entry
   if (log_is_enabled(Trace, redefine, class, obsolete)) {
@@ -2507,15 +2505,13 @@ nmethod* SharedRuntime::generate_native_wrapper(MacroAssembler* masm,
 
     __ bind(lock_done);
 
-#if INCLUDE_TSAN
-    if (ThreadSanitizer) {
+    TSAN_RUNTIME_ONLY(
       __ pusha();
       __ call_VM(noreg,
                  CAST_FROM_FN_PTR(address, SharedRuntime::tsan_oop_lock),
                  obj_reg);
       __ popa();
-    }
-#endif // INCLUDE_TSAN
+    );
   }
 
 
@@ -2651,15 +2647,13 @@ nmethod* SharedRuntime::generate_native_wrapper(MacroAssembler* masm,
     __ movptr(obj_reg, Address(oop_handle_reg, 0));
     __ resolve(IS_NOT_NULL, obj_reg);
 
-#if INCLUDE_TSAN
-    if (ThreadSanitizer) {
+    TSAN_RUNTIME_ONLY(
       __ pusha();
       __ call_VM(noreg, CAST_FROM_FN_PTR(address,
                                          SharedRuntime::tsan_oop_unlock),
                  obj_reg);
       __ popa();
-    }
-#endif // INCLUDE_TSAN
+    );
 
     Label done;
 
@@ -2698,14 +2692,12 @@ nmethod* SharedRuntime::generate_native_wrapper(MacroAssembler* masm,
 
   }
 
-#if INCLUDE_TSAN
-  if (ThreadSanitizer) {
+  TSAN_RUNTIME_ONLY(
     save_native_result(masm, ret_type, stack_slots);
     __ call_VM_leaf(
          CAST_FROM_FN_PTR(address, SharedRuntime::tsan_interp_method_exit));
     restore_native_result(masm, ret_type, stack_slots);
-  }
-#endif // INCLUDE_TSAN
+  );
 
   {
     SkipIfEqual skip(masm, &DTraceMethodProbes, false);

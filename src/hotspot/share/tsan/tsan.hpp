@@ -26,32 +26,21 @@
 #ifndef SHARE_TSAN_TSAN_HPP
 #define SHARE_TSAN_TSAN_HPP
 
-#if INCLUDE_TSAN
-#define TSAN_RUNTIME_ONLY(code) \
-    do { \
-      if (ThreadSanitizer) { \
-        code; \
-      } \
-    } while (0)
-#else
-#define TSAN_RUNTIME_ONLY(code)
-#endif
-
 void TsanRawLockCreate(const char *file, int line, const volatile void *lock);
 void TsanRawLockDestroy(const char *file, int line, const volatile void *lock);
 void TsanRawLockAcquired(const char *file, int line, const volatile void *lock);
 void TsanRawLockReleased(const char *file, int line, const volatile void *lock);
 
 #define TSAN_RAW_LOCK_CREATE(lock) \
-  TSAN_RUNTIME_ONLY(TsanRawLockCreate(__FILE__, __LINE__, lock))
+  TsanRawLockCreate(__FILE__, __LINE__, lock)
 
 #define TSAN_RAW_LOCK_DESTROY(lock) \
-  TSAN_RUNTIME_ONLY(TsanRawLockDestroy(__FILE__, __LINE__, lock))
+  TsanRawLockDestroy(__FILE__, __LINE__, lock)
 
 #define TSAN_RAW_LOCK_ACQUIRED(lock) \
-  TSAN_RUNTIME_ONLY(TsanRawLockAcquired(__FILE__, __LINE__, lock))
+  TsanRawLockAcquired(__FILE__, __LINE__, lock)
 
 #define TSAN_RAW_LOCK_RELEASED(lock) \
-  TSAN_RUNTIME_ONLY(TsanRawLockReleased(__FILE__, __LINE__, lock))
+  TsanRawLockReleased(__FILE__, __LINE__, lock)
 
 #endif  // SHARE_TSAN_TSAN_HPP

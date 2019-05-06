@@ -116,14 +116,12 @@ jint init_globals() {
   if (status != JNI_OK)
     return status;
 
-#if INCLUDE_TSAN
-  if (ThreadSanitizer) {
+  TSAN_RUNTIME_ONLY(
     status = tsan_init();
     if (status != JNI_OK) {
       return status;
     }
-  }
-#endif // INCLUDE_TSAN
+  );
 
   gc_barrier_stubs_init();   // depends on universe_init, must be before interpreter_init
   interpreter_init();        // before any methods loaded
@@ -177,11 +175,7 @@ void exit_globals() {
   if (!destructorsCalled) {
     destructorsCalled = true;
 
-#if INCLUDE_TSAN
-    if (ThreadSanitizer) {
-      tsan_exit();
-    }
-#endif // INCLUDE_TSAN
+    TSAN_RUNTIME_ONLY(tsan_exit());
 
     if (log_is_enabled(Info, monitorinflation)) {
       // The ObjectMonitor subsystem uses perf counters so

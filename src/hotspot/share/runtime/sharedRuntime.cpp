@@ -1084,7 +1084,7 @@ void SharedRuntime::tsan_oop_lock(Thread* thread, oop obj) {
   assert(ThreadSanitizer, "Need -XX:+ThreadSanitizer");
   assert(thread != NULL, "null thread");
   assert(obj != NULL, "null oop");
-  assert(oopDesc::is_oop(obj, false), "invalid oop");
+  assert(oopDesc::is_oop(obj), "invalid oop");
 
   __tsan_java_mutex_lock((julong)(address)obj);
 }
@@ -1094,7 +1094,7 @@ void SharedRuntime::tsan_oop_unlock(Thread *thread, oop obj) {
   assert(ThreadSanitizer, "Need -XX:+ThreadSanitizer");
   assert(thread != NULL, "null thread");
   assert(obj != NULL, "null oop");
-  assert(oopDesc::is_oop(obj, false), "invalid oop");
+  assert(oopDesc::is_oop(obj), "invalid oop");
 
   __tsan_java_mutex_unlock((julong)(address)obj);
 }
@@ -1104,7 +1104,7 @@ void SharedRuntime::tsan_oop_rec_lock(Thread* thread, oop obj, int rec) {
   assert(ThreadSanitizer, "Need -XX:+ThreadSanitizer");
   assert(thread != NULL, "null thread");
   assert(obj != NULL, "null oop");
-  assert(oopDesc::is_oop(obj, false), "invalid oop");
+  assert(oopDesc::is_oop(obj), "invalid oop");
 
   __tsan_java_mutex_lock_rec((julong)(address)obj, rec);
 }
@@ -1114,7 +1114,7 @@ int SharedRuntime::tsan_oop_rec_unlock(Thread *thread, oop obj) {
   assert(ThreadSanitizer, "Need -XX:+ThreadSanitizer");
   assert(thread != NULL, "null thread");
   assert(obj != NULL, "null oop");
-  assert(oopDesc::is_oop(obj, false), "invalid oop");
+  assert(oopDesc::is_oop(obj), "invalid oop");
 
   return __tsan_java_mutex_unlock_rec((julong)(address)obj);
 }

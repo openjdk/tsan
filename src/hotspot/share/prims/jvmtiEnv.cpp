@@ -3227,7 +3227,7 @@ JvmtiEnv::CreateRawMonitor(const char* name, jrawMonitorID* monitor_ptr) {
 
   *monitor_ptr = (jrawMonitorID)rmonitor;
 
-  TSAN_RAW_LOCK_CREATE(rmonitor);
+  TSAN_RUNTIME_ONLY(TSAN_RAW_LOCK_CREATE(rmonitor));
 
   return JVMTI_ERROR_NONE;
 } /* end CreateRawMonitor */
@@ -3251,7 +3251,7 @@ JvmtiEnv::DestroyRawMonitor(JvmtiRawMonitor * rmonitor) {
       int r;
       intptr_t recursion = rmonitor->recursions();
       for (intptr_t i = 0; i <= recursion; i++) {
-        TSAN_RAW_LOCK_RELEASED(rmonitor);
+        TSAN_RUNTIME_ONLY(TSAN_RAW_LOCK_RELEASED(rmonitor));
         r = rmonitor->raw_exit(thread);
         assert(r == ObjectMonitor::OM_OK, "raw_exit should have worked");
         if (r != ObjectMonitor::OM_OK) {  // robustness
@@ -3270,7 +3270,7 @@ JvmtiEnv::DestroyRawMonitor(JvmtiRawMonitor * rmonitor) {
     }
   }
 
-  TSAN_RAW_LOCK_DESTROY(rmonitor);
+  TSAN_RUNTIME_ONLY(TSAN_RAW_LOCK_DESTROY(rmonitor));
   delete rmonitor;
 
   return JVMTI_ERROR_NONE;
@@ -3335,7 +3335,7 @@ JvmtiEnv::RawMonitorEnter(JvmtiRawMonitor * rmonitor) {
     if (r != ObjectMonitor::OM_OK) {  // robustness
       return JVMTI_ERROR_INTERNAL;
     }
-    TSAN_RAW_LOCK_ACQUIRED(rmonitor);
+    TSAN_RUNTIME_ONLY(TSAN_RAW_LOCK_ACQUIRED(rmonitor));
   }
   return JVMTI_ERROR_NONE;
 } /* end RawMonitorEnter */
@@ -3356,7 +3356,7 @@ JvmtiEnv::RawMonitorExit(JvmtiRawMonitor * rmonitor) {
     int r = 0;
     Thread* thread = Thread::current();
 
-    TSAN_RAW_LOCK_RELEASED(rmonitor);
+    TSAN_RUNTIME_ONLY(TSAN_RAW_LOCK_RELEASED(rmonitor));
 
     if (thread->is_Java_thread()) {
       JavaThread* current_thread = (JavaThread*)thread;
@@ -3394,7 +3394,7 @@ JvmtiEnv::RawMonitorWait(JvmtiRawMonitor * rmonitor, jlong millis) {
 
   // A wait is modeled in Tsan as a simple release-acquire pair.
   // The matching release annotation is below.
-  TSAN_RAW_LOCK_RELEASED(rmonitor);
+  TSAN_RUNTIME_ONLY(TSAN_RAW_LOCK_RELEASED(rmonitor));
 
   if (thread->is_Java_thread()) {
     JavaThread* current_thread = (JavaThread*)thread;
@@ -3436,7 +3436,7 @@ JvmtiEnv::RawMonitorWait(JvmtiRawMonitor * rmonitor, jlong millis) {
 
   // A wait is modeled in Tsan as a simple release-acquire pair.
   // The matching acquire annotation is above.
-  TSAN_RAW_LOCK_ACQUIRED(rmonitor);
+  TSAN_RUNTIME_ONLY(TSAN_RAW_LOCK_ACQUIRED(rmonitor));
 
   switch (r) {
   case ObjectMonitor::OM_INTERRUPTED:

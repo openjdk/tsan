@@ -549,22 +549,17 @@ void SystemDictionary::double_lock_wait(Handle lockObject, TRAPS) {
   assert(calledholdinglock,"must hold lock for notify");
   assert((!oopDesc::equals(lockObject(), _system_loader_lock_obj) && !is_parallelCapable(lockObject)), "unexpected double_lock_wait");
   ObjectSynchronizer::notifyall(lockObject, THREAD);
-#if INCLUDE_TSAN
-  int tsan_rec = 0;
-  if (ThreadSanitizer) {
+
+  TSAN_ONLY(int tsan_rec = 0;)
+  TSAN_RUNTIME_ONLY(
     tsan_rec = SharedRuntime::tsan_oop_rec_unlock(THREAD, lockObject());
     assert(tsan_rec > 0, "tsan: unlocking unlocked mutex");
-  }
-#endif // INCLUDE_TSAN
+  );
   intptr_t recursions =  ObjectSynchronizer::complete_exit(lockObject, THREAD);
   SystemDictionary_lock->wait();
   SystemDictionary_lock->unlock();
   ObjectSynchronizer::reenter(lockObject, recursions, THREAD);
-#if INCLUDE_TSAN
-  if (ThreadSanitizer) {
-    SharedRuntime::tsan_oop_rec_lock(THREAD, lockObject(), tsan_rec);
-  }
-#endif // INCLUDE_TSAN
+  TSAN_RUNTIME_ONLY(SharedRuntime::tsan_oop_rec_lock(THREAD, lockObject(), tsan_rec));
   SystemDictionary_lock->lock();
 }
 

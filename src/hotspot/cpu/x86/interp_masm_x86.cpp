@@ -1153,11 +1153,7 @@ void InterpreterMacroAssembler::lock_object(Register lock_reg) {
   assert(lock_reg == LP64_ONLY(c_rarg1) NOT_LP64(rdx),
          "The argument is only for looks. It must be c_rarg1");
 
-#if INCLUDE_TSAN
-  if (ThreadSanitizer) {
-    push_ptr(lock_reg);
-  }
-#endif // INCLUDE_TSAN
+  TSAN_RUNTIME_ONLY(push_ptr(lock_reg));
   if (UseHeavyMonitors) {
     call_VM(noreg,
             CAST_FROM_FN_PTR(address, InterpreterRuntime::monitorenter),
@@ -1237,16 +1233,14 @@ void InterpreterMacroAssembler::lock_object(Register lock_reg) {
     bind(done);
   }
 
-#if INCLUDE_TSAN
-  if (ThreadSanitizer) {
+  TSAN_RUNTIME_ONLY(
     pop_ptr(lock_reg);
     pusha();
     call_VM(noreg,
             CAST_FROM_FN_PTR(address, SharedRuntime::tsan_interp_lock),
             lock_reg);
     popa();
-  }
-#endif // INCLUDE_TSAN
+  );
 }
 
 
@@ -1266,15 +1260,13 @@ void InterpreterMacroAssembler::unlock_object(Register lock_reg) {
   assert(lock_reg == LP64_ONLY(c_rarg1) NOT_LP64(rdx),
          "The argument is only for looks. It must be c_rarg1");
 
-#if INCLUDE_TSAN
-  if (ThreadSanitizer) {
+  TSAN_RUNTIME_ONLY(
     pusha();
     call_VM(noreg,
             CAST_FROM_FN_PTR(address, SharedRuntime::tsan_interp_unlock),
             lock_reg);
     popa();
-  }
-#endif // INCLUDE_TSAN
+  );
 
   if (UseHeavyMonitors) {
     call_VM(noreg,
@@ -2020,12 +2012,9 @@ void InterpreterMacroAssembler::notify_method_entry() {
                  rthread, rarg);
   }
 
-#if INCLUDE_TSAN
-  if (ThreadSanitizer) {
-    call_VM(noreg, CAST_FROM_FN_PTR(address,
-                                    SharedRuntime::tsan_interp_method_entry));
-  }
-#endif // INCLUDE_TSAN
+  TSAN_RUNTIME_ONLY(call_VM(noreg,
+                            CAST_FROM_FN_PTR(address,
+                                             SharedRuntime::tsan_interp_method_entry)));
 
   // RedefineClasses() tracing support for obsolete method entry
   if (log_is_enabled(Trace, redefine, class, obsolete)) {
@@ -2064,14 +2053,12 @@ void InterpreterMacroAssembler::notify_method_exit(
     pop(state);
   }
 
-#if INCLUDE_TSAN
-  if (ThreadSanitizer) {
+  TSAN_RUNTIME_ONLY(
     push(state);
     call_VM_leaf(CAST_FROM_FN_PTR(address,
                                   SharedRuntime::tsan_interp_method_exit));
     pop(state);
-  }
-#endif // INCLUDE_TSAN
+  );
 
   {
     SkipIfEqual skip(this, &DTraceMethodProbes, false);

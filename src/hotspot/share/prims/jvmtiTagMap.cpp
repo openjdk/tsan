@@ -390,11 +390,11 @@ class TsanMutexScope : public StackObj {
  public:
   // Don't actually lock it, just tell tsan we did.
   TsanMutexScope(Monitor* mutex) : _lock(mutex) {
-    TSAN_RAW_LOCK_ACQUIRED(_lock);
+    TSAN_RUNTIME_ONLY(TSAN_RAW_LOCK_ACQUIRED(_lock));
   }
 
   ~TsanMutexScope() {
-    TSAN_RAW_LOCK_RELEASED(_lock);
+    TSAN_RUNTIME_ONLY(TSAN_RAW_LOCK_RELEASED(_lock));
   }
 };
 

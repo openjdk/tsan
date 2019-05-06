@@ -425,11 +425,7 @@ void ObjectSynchronizer::jni_enter(Handle obj, TRAPS) {
   THREAD->set_current_pending_monitor_is_from_java(false);
   inflate(THREAD, obj(), inflate_cause_jni_enter)->enter(THREAD);
   THREAD->set_current_pending_monitor_is_from_java(true);
-#if INCLUDE_TSAN
-  if (ThreadSanitizer) {
-    SharedRuntime::tsan_oop_lock(THREAD, obj());
-  }
-#endif // INCLUDE_TSAN
+  TSAN_RUNTIME_ONLY(SharedRuntime::tsan_oop_lock(THREAD, obj()));
 }
 
 // NOTE: must use heavy weight monitor to handle jni monitor exit
@@ -445,11 +441,7 @@ void ObjectSynchronizer::jni_exit(oop obj, Thread* THREAD) {
   // If this thread has locked the object, exit the monitor.  Note:  can't use
   // monitor->check(CHECK); must exit even if an exception is pending.
   if (monitor->check(THREAD)) {
-#if INCLUDE_TSAN
-    if (ThreadSanitizer) {
-      SharedRuntime::tsan_oop_unlock(THREAD, obj);
-    }
-#endif // INCLUDE_TSAN
+    TSAN_RUNTIME_ONLY(SharedRuntime::tsan_oop_unlock(THREAD, obj));
     monitor->exit(true, THREAD);
   }
 }
@@ -465,21 +457,13 @@ ObjectLocker::ObjectLocker(Handle obj, Thread* thread, bool doLock) {
 
   if (_dolock) {
     ObjectSynchronizer::fast_enter(_obj, &_lock, false, _thread);
-#if INCLUDE_TSAN
-    if (ThreadSanitizer) {
-      SharedRuntime::tsan_oop_lock(_thread, _obj());
-    }
-#endif // INCLUDE_TSAN
+    TSAN_RUNTIME_ONLY(SharedRuntime::tsan_oop_lock(_thread, _obj()));
   }
 }
 
 ObjectLocker::~ObjectLocker() {
   if (_dolock) {
-#if INCLUDE_TSAN
-    if (ThreadSanitizer) {
-      SharedRuntime::tsan_oop_unlock(_thread, _obj());
-    }
-#endif // INCLUDE_TSAN
+    TSAN_RUNTIME_ONLY(SharedRuntime::tsan_oop_unlock(_thread, _obj()));
     ObjectSynchronizer::fast_exit(_obj(), &_lock, _thread);
   }
 }
@@ -500,21 +484,15 @@ int ObjectSynchronizer::wait(Handle obj, jlong millis, TRAPS) {
 
   DTRACE_MONITOR_WAIT_PROBE(monitor, obj(), THREAD, millis);
 
-#if INCLUDE_TSAN
-  int tsan_rec = 0;
-  if (ThreadSanitizer) {
+  TSAN_ONLY(int tsan_rec = 0;)
+  TSAN_RUNTIME_ONLY(
     tsan_rec = SharedRuntime::tsan_oop_rec_unlock(THREAD, obj());
     assert(tsan_rec > 0, "tsan: unlocking unlocked mutex");
-  }
-#endif // INCLUDE_TSAN
+  );
 
   monitor->wait(millis, true, THREAD);
 
-#if INCLUDE_TSAN
-  if (ThreadSanitizer) {
-    SharedRuntime::tsan_oop_rec_lock(THREAD, obj(), tsan_rec);
-  }
-#endif // INCLUDE_TSAN
+  TSAN_RUNTIME_ONLY(SharedRuntime::tsan_oop_rec_lock(THREAD, obj(), tsan_rec));
 
   // This dummy call is in place to get around dtrace bug 6254741.  Once
   // that's fixed we can uncomment the following line, remove the call
@@ -532,19 +510,13 @@ void ObjectSynchronizer::waitUninterruptibly(Handle obj, jlong millis, TRAPS) {
     THROW_MSG(vmSymbols::java_lang_IllegalArgumentException(), "timeout value is negative");
   }
   ObjectMonitor* monitor = inflate(THREAD, obj(), inflate_cause_wait);
-#if INCLUDE_TSAN
-  int tsan_rec;
-  if (ThreadSanitizer) {
+  TSAN_ONLY(int tsan_rec;)
+  TSAN_RUNTIME_ONLY(
     tsan_rec = SharedRuntime::tsan_oop_rec_unlock(THREAD, obj());
     assert(tsan_rec > 0, "tsan: unlocking unlocked mutex");
-  }
-#endif // INCLUDE_TSAN
+  );
   monitor->wait(millis, false, THREAD);
-#if INCLUDE_TSAN
-  if (ThreadSanitizer) {
-    SharedRuntime::tsan_oop_rec_lock(THREAD, obj(), tsan_rec);
-  }
-#endif // INCLUDE_TSAN
+  TSAN_RUNTIME_ONLY(SharedRuntime::tsan_oop_rec_lock(THREAD, obj(), tsan_rec));
 }
 
 void ObjectSynchronizer::notify(Handle obj, TRAPS) {
@@ -1802,14 +1774,10 @@ class ReleaseJavaMonitorsClosure: public MonitorClosure {
   ReleaseJavaMonitorsClosure(Thread* thread) : THREAD(thread) {}
   void do_monitor(ObjectMonitor* mid) {
     if (mid->owner() == THREAD) {
-#if INCLUDE_TSAN
-      if (ThreadSanitizer) {
-        // Note well -- this occurs ONLY on thread exit, and is a last ditch
-        // effort to release all locks. Hence, we don't need to record tsan's
-        // recursion count -- it will never be locked again.
-        SharedRuntime::tsan_oop_rec_unlock(THREAD, (oop)mid->object());
-      }
-#endif // INCLUDE_TSAN
+      // Note well -- this occurs ONLY on thread exit, and is a last ditch
+      // effort to release all locks. Hence, we don't need to record tsan's
+      // recursion count -- it will never be locked again.
+      TSAN_RUNTIME_ONLY(SharedRuntime::tsan_oop_rec_unlock(THREAD, (oop)mid->object()));
       (void)mid->complete_exit(CHECK);
     }
   }

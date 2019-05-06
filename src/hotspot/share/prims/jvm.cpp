@@ -3386,7 +3386,7 @@ JNIEXPORT void* JNICALL JVM_RawMonitorCreate(void) {
   VM_Exit::block_if_vm_exited();
   JVMWrapper("JVM_RawMonitorCreate");
   void *mon = new Mutex(Mutex::native, "JVM_RawMonitorCreate");
-  TSAN_RAW_LOCK_CREATE(mon);
+  TSAN_RUNTIME_ONLY(TSAN_RAW_LOCK_CREATE(mon));
   return mon;
 }
 
@@ -3394,7 +3394,7 @@ JNIEXPORT void* JNICALL JVM_RawMonitorCreate(void) {
 JNIEXPORT void JNICALL  JVM_RawMonitorDestroy(void *mon) {
   VM_Exit::block_if_vm_exited();
   JVMWrapper("JVM_RawMonitorDestroy");
-  TSAN_RAW_LOCK_DESTROY(mon);
+  TSAN_RUNTIME_ONLY(TSAN_RAW_LOCK_DESTROY(mon));
   delete ((Mutex*) mon);
 }
 
@@ -3403,7 +3403,7 @@ JNIEXPORT jint JNICALL JVM_RawMonitorEnter(void *mon) {
   VM_Exit::block_if_vm_exited();
   JVMWrapper("JVM_RawMonitorEnter");
   ((Mutex*) mon)->jvm_raw_lock();
-  TSAN_RAW_LOCK_ACQUIRED(mon);
+  TSAN_RUNTIME_ONLY(TSAN_RAW_LOCK_ACQUIRED(mon));
   return 0;
 }
 
@@ -3411,7 +3411,7 @@ JNIEXPORT jint JNICALL JVM_RawMonitorEnter(void *mon) {
 JNIEXPORT void JNICALL JVM_RawMonitorExit(void *mon) {
   VM_Exit::block_if_vm_exited();
   JVMWrapper("JVM_RawMonitorExit");
-  TSAN_RAW_LOCK_RELEASED(mon);
+  TSAN_RUNTIME_ONLY(TSAN_RAW_LOCK_RELEASED(mon));
   ((Mutex*) mon)->jvm_raw_unlock();
 }
 

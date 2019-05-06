@@ -47,7 +47,7 @@ is running. Raw monitor transition will not work");
       JvmtiRawMonitor *rmonitor = monitors()->at(i);
       int r = rmonitor->raw_enter(current_java_thread);
       assert(r == ObjectMonitor::OM_OK, "raw_enter should have worked");
-      TSAN_RAW_LOCK_ACQUIRED(rmonitor);
+      TSAN_RUNTIME_ONLY(TSAN_RAW_LOCK_ACQUIRED(rmonitor));
     }
   }
   // pending monitors are converted to real monitor so delete them all.
