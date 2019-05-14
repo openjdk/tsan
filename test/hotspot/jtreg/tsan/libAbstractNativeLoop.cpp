@@ -36,13 +36,13 @@ static jvmtiEnv *jvmti = NULL;
 JNIEXPORT void JNICALL Java_AbstractNativeLoop_writeNativeGlobalSync(
     JNIEnv *env, jclass unused) {
   pthread_mutex_lock(&mutex);
-  global = 123;
+  global = 30;
   pthread_mutex_unlock(&mutex);
 }
 
 JNIEXPORT void JNICALL Java_AbstractNativeLoop_writeNativeGlobal(
     JNIEnv *env, jclass unused) {
-  global = 123;
+  global = 31;
 }
 
 JNIEXPORT jint JNICALL Java_AbstractNativeLoop_readNativeGlobal(JNIEnv *env,
@@ -61,7 +61,7 @@ JNIEXPORT void JNICALL Java_AbstractNativeLoop_writeRawLockedNativeGlobal(
     JNIEnv *env, jclass unused, long lock) {
   jrawMonitorID raw_lock = reinterpret_cast<jrawMonitorID>(lock);
   jvmti->RawMonitorEnter(raw_lock);
-  global = 123;
+  global = 32;
   jvmti->RawMonitorExit(raw_lock);
 }
 
