@@ -65,7 +65,8 @@
   static void tsan_observe_get_or_put(
       const Address &field,
       Register flags,
-      TsanMemoryReadWriteFunction tsan_function);
+      TsanMemoryReadWriteFunction tsan_function,
+      TosState tos);
 
   // Tell tsan that an array has been read from or written to.
   // tsan_function must be one of the SharedRuntime::tsan_read/write*

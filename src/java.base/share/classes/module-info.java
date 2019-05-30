@@ -109,6 +109,7 @@ module java.base {
     exports java.time.zone;
     exports java.util;
     exports java.util.concurrent;
+    exports java.util.concurrent.annotation;
     exports java.util.concurrent.atomic;
     exports java.util.concurrent.locks;
     exports java.util.function;

@@ -1073,6 +1073,7 @@ public:
     _method_HotSpotIntrinsicCandidate,
     _jdk_internal_vm_annotation_Contended,
     _field_Stable,
+    _field_TsanIgnore,
     _jdk_internal_vm_annotation_ReservedStackAccess,
     _annotation_LIMIT
   };
@@ -1109,6 +1110,11 @@ public:
 
   void set_stable(bool stable) { set_annotation(_field_Stable); }
   bool is_stable() const { return has_annotation(_field_Stable); }
+
+#if INCLUDE_TSAN
+  void set_tsan_ignore(bool tsan_ignore) { set_annotation(_field_TsanIgnore); }
+  bool is_tsan_ignore() const { return has_annotation(_field_TsanIgnore); }
+#endif  // INCLUDE_TSAN
 };
 
 // This class also doubles as a holder for metadata cleanup.
@@ -2110,6 +2116,14 @@ AnnotationCollector::annotation_index(const ClassLoaderData* loader_data,
       if (RestrictReservedStack && !privileged) break; // honor privileges
       return _jdk_internal_vm_annotation_ReservedStackAccess;
     }
+#if INCLUDE_TSAN
+    case vmSymbols::VM_SYMBOL_ENUM_NAME(java_util_concurrent_annotation_LazyInit): {
+      if (_location != _in_field) {
+        break;  // only allow for fields
+      }
+      return _field_TsanIgnore;
+    }
+#endif  // INCLUDE_TSAN
     default: {
       break;
     }
@@ -2122,6 +2136,11 @@ void ClassFileParser::FieldAnnotationCollector::apply_to(FieldInfo* f) {
     f->set_contended_group(contended_group());
   if (is_stable())
     f->set_stable(true);
+  TSAN_RUNTIME_ONLY(
+    if (is_tsan_ignore())
+      f->set_tsan_ignore(true);
+  );
+
 }
 
 ClassFileParser::FieldAnnotationCollector::~FieldAnnotationCollector() {

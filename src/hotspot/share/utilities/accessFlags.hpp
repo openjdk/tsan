@@ -85,12 +85,14 @@ enum {
   JVM_ACC_FIELD_STABLE                    = 0x00000020, // @Stable field, same as JVM_ACC_SYNCHRONIZED and JVM_ACC_SUPER
   JVM_ACC_FIELD_INITIALIZED_FINAL_UPDATE  = 0x00000100, // (static) final field updated outside (class) initializer, same as JVM_ACC_NATIVE
   JVM_ACC_FIELD_HAS_GENERIC_SIGNATURE     = 0x00000800, // field has generic signature
+  JVM_ACC_FIELD_TSAN_IGNORE               = 0x00000200, // TSAN should ignore memory accesses to this field, same as JVM_ACC_INTERFACE
 
   JVM_ACC_FIELD_INTERNAL_FLAGS       = JVM_ACC_FIELD_ACCESS_WATCHED |
                                        JVM_ACC_FIELD_MODIFICATION_WATCHED |
                                        JVM_ACC_FIELD_INTERNAL |
                                        JVM_ACC_FIELD_STABLE |
-                                       JVM_ACC_FIELD_HAS_GENERIC_SIGNATURE,
+                                       JVM_ACC_FIELD_HAS_GENERIC_SIGNATURE |
+                                       JVM_ACC_FIELD_TSAN_IGNORE,
 
                                                     // flags accepted by set_field_flags()
   JVM_ACC_FIELD_FLAGS                = JVM_RECOGNIZED_FIELD_MODIFIERS | JVM_ACC_FIELD_INTERNAL_FLAGS
@@ -166,6 +168,9 @@ class AccessFlags {
   bool is_stable() const                { return (_flags & JVM_ACC_FIELD_STABLE) != 0; }
   bool field_has_generic_signature() const
                                         { return (_flags & JVM_ACC_FIELD_HAS_GENERIC_SIGNATURE) != 0; }
+#if INCLUDE_TSAN
+  bool is_tsan_ignore() const           { return (_flags & JVM_ACC_FIELD_TSAN_IGNORE) != 0; }
+#endif  // INCLUDE_TSAN
 
   // get .class file flags
   jint get_flags               () const { return (_flags & JVM_ACC_WRITTEN_FLAGS); }

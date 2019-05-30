@@ -248,6 +248,16 @@ class FieldInfo {
     else   _shorts[access_flags_offset] &= ~JVM_ACC_FIELD_STABLE;
   }
 
+#if INCLUDE_TSAN
+  bool is_tsan_ignore() const {
+    return (access_flags() & JVM_ACC_FIELD_TSAN_IGNORE) != 0;
+  }
+  void set_tsan_ignore(bool z) {
+    if (z) _shorts[access_flags_offset] |=  JVM_ACC_FIELD_TSAN_IGNORE;
+    else   _shorts[access_flags_offset] &= ~JVM_ACC_FIELD_TSAN_IGNORE;
+  }
+#endif  // INCLUDE_TSAN
+
   Symbol* lookup_symbol(int symbol_index) const {
     assert(is_internal(), "only internal fields");
     return vmSymbols::symbol_at((vmSymbols::SID)symbol_index);

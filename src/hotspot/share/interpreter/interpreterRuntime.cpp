@@ -738,6 +738,11 @@ void InterpreterRuntime::resolve_get_put(JavaThread* thread, Bytecodes::Code byt
     }
   }
 
+  bool is_tsan_ignore = false;
+#if INCLUDE_TSAN
+  is_tsan_ignore = info.access_flags().is_stable() || info.access_flags().is_tsan_ignore();
+#endif  // INCLUDE_TSAN
+
   cp_cache_entry->set_field(
     get_code,
     put_code,
@@ -747,6 +752,7 @@ void InterpreterRuntime::resolve_get_put(JavaThread* thread, Bytecodes::Code byt
     state,
     info.access_flags().is_final(),
     info.access_flags().is_volatile(),
+    is_tsan_ignore,
     pool->pool_holder()
   );
 }
