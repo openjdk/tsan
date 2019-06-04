@@ -22,32 +22,35 @@
  * questions.
  */
 
-/* @test NonRacyNativeLoopNativeSyncTest
- * @summary Test that native code protected by native synchronization is not racy.
+/* @test NonRacyStringArrayLoopTest
+ * @summary Test a simple Java non-racy memory access via a String array.
  * @library /test/lib
- * @build AbstractLoop AbstractNativeLoop TsanRunner
- * @run main/othervm/native NonRacyNativeLoopNativeSyncTest
+ * @build AbstractLoop TsanRunner
+ * @run main NonRacyStringArrayLoopTest
  */
 
 import java.io.IOException;
 import jdk.test.lib.process.OutputAnalyzer;
 import jdk.test.lib.process.ProcessTools;
 
-public class NonRacyNativeLoopNativeSyncTest {
+public class NonRacyStringArrayLoopTest {
   public static void main(String[] args) throws IOException {
-    TsanRunner.runTsanTestExpectSuccess(NonRacyNativeLoopNativeSyncRunner.class);
+    TsanRunner.runTsanTestExpectSuccess(NonRacyStringArrayLoopRunner.class);
   }
 }
 
-class NonRacyNativeLoopNativeSyncRunner extends AbstractNativeLoop {
+class NonRacyStringArrayLoopRunner extends AbstractLoop {
+  private String[] x = new String[] {"a", "b"};
+
   @Override
-  protected void run(int i) {
-    writeNativeGlobalSync();
+  protected synchronized void run(int i) {
+    char c = x[0].charAt(0);
+    x[0] = Character.toString(c);
   }
 
   public static void main(String[] args) throws InterruptedException {
-    NonRacyNativeLoopNativeSyncRunner loop = new NonRacyNativeLoopNativeSyncRunner();
+    NonRacyStringArrayLoopRunner loop = new NonRacyStringArrayLoopRunner();
     loop.runInTwoThreads();
-    System.out.println("native_global = " + loop.readNativeGlobal());
+    System.out.println("x = " + loop.x[0]);
   }
 }

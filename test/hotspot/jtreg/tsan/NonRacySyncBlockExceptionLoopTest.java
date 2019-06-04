@@ -22,32 +22,43 @@
  * questions.
  */
 
-/* @test NonRacyNativeLoopNativeSyncTest
- * @summary Test that native code protected by native synchronization is not racy.
+/* @test NonRacySyncBlockExceptionLoopTest
+ * @summary Test a simple Java non-racy memory access via an int field in a
+ *          synchronized block that throws an exception.
  * @library /test/lib
- * @build AbstractLoop AbstractNativeLoop TsanRunner
- * @run main/othervm/native NonRacyNativeLoopNativeSyncTest
+ * @build AbstractLoop TsanRunner
+ * @run main NonRacySyncBlockExceptionLoopTest
  */
 
 import java.io.IOException;
 import jdk.test.lib.process.OutputAnalyzer;
 import jdk.test.lib.process.ProcessTools;
 
-public class NonRacyNativeLoopNativeSyncTest {
+public class NonRacySyncBlockExceptionLoopTest {
   public static void main(String[] args) throws IOException {
-    TsanRunner.runTsanTestExpectSuccess(NonRacyNativeLoopNativeSyncRunner.class);
+    TsanRunner.runTsanTestExpectSuccess(NonRacySyncBlockExceptionLoopRunner.class);
   }
 }
 
-class NonRacyNativeLoopNativeSyncRunner extends AbstractNativeLoop {
+class NonRacySyncBlockExceptionLoopRunner extends AbstractLoop {
+  private static class LoopException extends Exception {}
+  private int x = 0;
+
   @Override
   protected void run(int i) {
-    writeNativeGlobalSync();
+    try {
+      synchronized (this) {
+        x = x + 1;
+        throw new LoopException();
+      }
+    } catch (LoopException e) {
+      // expected
+    }
   }
 
   public static void main(String[] args) throws InterruptedException {
-    NonRacyNativeLoopNativeSyncRunner loop = new NonRacyNativeLoopNativeSyncRunner();
+    NonRacySyncBlockExceptionLoopRunner loop = new NonRacySyncBlockExceptionLoopRunner();
     loop.runInTwoThreads();
-    System.out.println("native_global = " + loop.readNativeGlobal());
+    System.out.println("x = " + loop.x);
   }
 }

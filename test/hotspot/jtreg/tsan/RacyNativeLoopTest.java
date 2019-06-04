@@ -33,9 +33,6 @@ import java.io.IOException;
 import jdk.test.lib.process.OutputAnalyzer;
 import jdk.test.lib.process.ProcessTools;
 
-/**
- * Test that TSAN correctly detects a race in native code.
- */
 public class RacyNativeLoopTest {
   public static void main(String[] args) throws IOException {
     TsanRunner.runTsanTestExpectFailure(RacyNativeLoopRunner.class)
@@ -54,6 +51,6 @@ class RacyNativeLoopRunner extends AbstractNativeLoop {
   public static void main(String[] args) throws InterruptedException {
     RacyNativeLoopRunner loop = new RacyNativeLoopRunner();
     loop.runInTwoThreads();
-    System.out.format("native_global = %d\n", loop.readNativeGlobal());
+    System.out.println("native_global = " + loop.readNativeGlobal());
   }
 }

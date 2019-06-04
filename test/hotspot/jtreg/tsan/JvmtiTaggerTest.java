@@ -31,9 +31,6 @@
 
 import java.io.IOException;
 
-/**
- * Test that TSAN doesn't report JVMTI tagging as racy.
- */
 public class JvmtiTaggerTest {
   public static void main(String[] args) throws IOException {
     TsanRunner.runTsanTestExpectSuccess(JvmtiTaggerLoopRunner.class,

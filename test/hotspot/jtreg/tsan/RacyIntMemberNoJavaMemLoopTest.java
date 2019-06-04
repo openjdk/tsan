@@ -34,9 +34,6 @@ import java.io.IOException;
 import jdk.test.lib.process.OutputAnalyzer;
 import jdk.test.lib.process.ProcessTools;
 
-/**
- * Test a Java race on an integer member field.
- */
 public class RacyIntMemberNoJavaMemLoopTest {
   public static void main(String[] args) throws IOException {
     TsanRunner.runTsanTestExpectSuccess(RacyIntMemberNoJavaMemLoopRunner.class,
@@ -55,6 +52,6 @@ class RacyIntMemberNoJavaMemLoopRunner extends AbstractLoop {
   public static void main(String[] args) throws InterruptedException {
     RacyIntMemberNoJavaMemLoopRunner loop = new RacyIntMemberNoJavaMemLoopRunner();
     loop.runInTwoThreads();
-    System.out.format("x = %d\n", loop.x);
+    System.out.println("x = " + loop.x);
   }
 }

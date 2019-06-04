@@ -22,32 +22,36 @@
  * questions.
  */
 
-/* @test NonRacyNativeLoopNativeSyncTest
- * @summary Test that native code protected by native synchronization is not racy.
+/* @test RacyBooleanMemberLoopTest
+ * @summary Test a simple Java data race via a boolean field.
  * @library /test/lib
- * @build AbstractLoop AbstractNativeLoop TsanRunner
- * @run main/othervm/native NonRacyNativeLoopNativeSyncTest
+ * @build AbstractLoop TsanRunner
+ * @run main RacyBooleanMemberLoopTest
  */
 
 import java.io.IOException;
 import jdk.test.lib.process.OutputAnalyzer;
 import jdk.test.lib.process.ProcessTools;
 
-public class NonRacyNativeLoopNativeSyncTest {
+public class RacyBooleanMemberLoopTest {
   public static void main(String[] args) throws IOException {
-    TsanRunner.runTsanTestExpectSuccess(NonRacyNativeLoopNativeSyncRunner.class);
+    TsanRunner.runTsanTestExpectFailure(RacyBooleanMemberLoopRunner.class)
+        .shouldMatch("(Read|Write) of size 1 at 0x[0-9a-fA-F]+ by thread T[0-9]+")
+        .shouldContain(" #0 RacyBooleanMemberLoopRunner.run(I)V RacyBooleanMemberLoopTest.java:");
   }
 }
 
-class NonRacyNativeLoopNativeSyncRunner extends AbstractNativeLoop {
+class RacyBooleanMemberLoopRunner extends AbstractLoop {
+  private boolean x = false;
+
   @Override
   protected void run(int i) {
-    writeNativeGlobalSync();
+    x = !x;
   }
 
   public static void main(String[] args) throws InterruptedException {
-    NonRacyNativeLoopNativeSyncRunner loop = new NonRacyNativeLoopNativeSyncRunner();
+    RacyBooleanMemberLoopRunner loop = new RacyBooleanMemberLoopRunner();
     loop.runInTwoThreads();
-    System.out.println("native_global = " + loop.readNativeGlobal());
+    System.out.println("x = " + loop.x);
   }
 }

@@ -31,9 +31,6 @@
 
 import java.io.IOException;
 
-/**
- * Test that TSAN doesn't report native code as racy when protected by Jvmti synchronization.
- */
 public class NonRawRacyNativeLoopTest {
   public static void main(String[] args) throws IOException {
     TsanRunner.runTsanTestExpectSuccess(NonRawRacyNativeLoopRunner.class,
@@ -57,6 +54,6 @@ class NonRawRacyNativeLoopRunner extends AbstractNativeLoop {
   public static void main(String[] args) throws InterruptedException {
     NonRawRacyNativeLoopRunner loop = new NonRawRacyNativeLoopRunner();
     loop.runInTwoThreads();
-    System.out.format("native_global = %d\n", loop.readNativeGlobal());
+    System.out.println("native_global = " + loop.readNativeGlobal());
   }
 }

@@ -22,32 +22,36 @@
  * questions.
  */
 
-/* @test NonRacyNativeLoopNativeSyncTest
- * @summary Test that native code protected by native synchronization is not racy.
+/* @test RacyDoubleMemberLoopTest
+ * @summary Test a simple Java data race via a double field.
  * @library /test/lib
- * @build AbstractLoop AbstractNativeLoop TsanRunner
- * @run main/othervm/native NonRacyNativeLoopNativeSyncTest
+ * @build AbstractLoop TsanRunner
+ * @run main RacyDoubleMemberLoopTest
  */
 
 import java.io.IOException;
 import jdk.test.lib.process.OutputAnalyzer;
 import jdk.test.lib.process.ProcessTools;
 
-public class NonRacyNativeLoopNativeSyncTest {
+public class RacyDoubleMemberLoopTest {
   public static void main(String[] args) throws IOException {
-    TsanRunner.runTsanTestExpectSuccess(NonRacyNativeLoopNativeSyncRunner.class);
+    TsanRunner.runTsanTestExpectFailure(RacyDoubleMemberLoopRunner.class)
+        .shouldMatch("(Read|Write) of size 8 at 0x[0-9a-fA-F]+ by thread T[0-9]+")
+        .shouldContain(" #0 RacyDoubleMemberLoopRunner.run(I)V RacyDoubleMemberLoopTest.java:");
   }
 }
 
-class NonRacyNativeLoopNativeSyncRunner extends AbstractNativeLoop {
+class RacyDoubleMemberLoopRunner extends AbstractLoop {
+  private double x = 0.0;
+
   @Override
   protected void run(int i) {
-    writeNativeGlobalSync();
+    x = x + 1.0;
   }
 
   public static void main(String[] args) throws InterruptedException {
-    NonRacyNativeLoopNativeSyncRunner loop = new NonRacyNativeLoopNativeSyncRunner();
+    RacyDoubleMemberLoopRunner loop = new RacyDoubleMemberLoopRunner();
     loop.runInTwoThreads();
-    System.out.println("native_global = " + loop.readNativeGlobal());
+    System.out.println("x = " + loop.x);
   }
 }

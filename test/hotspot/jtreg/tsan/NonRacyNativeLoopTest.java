@@ -33,10 +33,6 @@ import java.io.IOException;
 import jdk.test.lib.process.OutputAnalyzer;
 import jdk.test.lib.process.ProcessTools;
 
-/**
- * Test that TSAN doesn't report native code as racy
- * when protected by Java synchronization.
- */
 public class NonRacyNativeLoopTest {
   public static void main(String[] args) throws IOException {
     TsanRunner.runTsanTestExpectSuccess(NonRacyNativeLoopRunner.class);
@@ -52,6 +48,6 @@ class NonRacyNativeLoopRunner extends AbstractNativeLoop {
   public static void main(String[] args) throws InterruptedException {
     NonRacyNativeLoopRunner loop = new NonRacyNativeLoopRunner();
     loop.runInTwoThreads();
-    System.out.format("native_global = %d\n", loop.readNativeGlobal());
+    System.out.println("native_global = " + loop.readNativeGlobal());
   }
 }

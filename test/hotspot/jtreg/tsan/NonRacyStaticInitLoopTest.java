@@ -22,32 +22,35 @@
  * questions.
  */
 
-/* @test NonRacyNativeLoopNativeSyncTest
- * @summary Test that native code protected by native synchronization is not racy.
+/* @test NonRacyStaticInitLoopTest
+ * @summary Test that static initialization is not reported as racy later on.
  * @library /test/lib
- * @build AbstractLoop AbstractNativeLoop TsanRunner
- * @run main/othervm/native NonRacyNativeLoopNativeSyncTest
+ * @build AbstractLoop TsanRunner
+ * @run main NonRacyStaticInitLoopTest
  */
 
 import java.io.IOException;
-import jdk.test.lib.process.OutputAnalyzer;
-import jdk.test.lib.process.ProcessTools;
 
-public class NonRacyNativeLoopNativeSyncTest {
+public class NonRacyStaticInitLoopTest {
   public static void main(String[] args) throws IOException {
-    TsanRunner.runTsanTestExpectSuccess(NonRacyNativeLoopNativeSyncRunner.class);
+    TsanRunner.runTsanTestExpectSuccess(NonRacyStaticInitLoopRunner.class);
   }
 }
 
-class NonRacyNativeLoopNativeSyncRunner extends AbstractNativeLoop {
-  @Override
-  protected void run(int i) {
-    writeNativeGlobalSync();
+class NonRacyStaticInitLoopRunner {
+  private static int x;
+
+  static {
+    x = 5;
   }
 
   public static void main(String[] args) throws InterruptedException {
-    NonRacyNativeLoopNativeSyncRunner loop = new NonRacyNativeLoopNativeSyncRunner();
-    loop.runInTwoThreads();
-    System.out.println("native_global = " + loop.readNativeGlobal());
+    Thread t =
+        new Thread(
+            () -> {
+              x = 2;
+            });
+    t.start();
+    t.join();
   }
 }

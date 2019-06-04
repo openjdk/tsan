@@ -43,24 +43,20 @@ abstract class AbstractLoop {
 
   // Threads pulled out to allow direct reference
   final Thread t1 =
-      new Thread() {
-        @Override
-        public void run() {
-          for (int i = 0; i < LOOPS; i++) {
-            AbstractLoop.this.run(i);
-          }
-        }
-      };
+      new Thread(
+          () -> {
+            for (int i = 0; i < LOOPS; i++) {
+              AbstractLoop.this.run(i);
+            }
+          });
 
   final Thread t2 =
-      new Thread() {
-        @Override
-        public void run() {
-          for (int i = 0; i < LOOPS; i++) {
-            AbstractLoop.this.run(i);
-          }
-        }
-      };
+      new Thread(
+          () -> {
+            for (int i = 0; i < LOOPS; i++) {
+              AbstractLoop.this.run(i);
+            }
+          });
 
   final void runInTwoThreads() throws InterruptedException {
     System.err.println("Begin " + name);
