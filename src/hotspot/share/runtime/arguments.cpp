@@ -3858,6 +3858,8 @@ jint Arguments::parse(const JavaVMInitArgs* initial_cmd_args) {
     // performance benefits from rewriting bytecodes is negligible.
     FLAG_SET_ERGO(bool, RewriteBytecodes, false);
     FLAG_SET_ERGO(bool, RewriteFrequentPairs, false);
+    // Turn off CDS, it interferes with eagerly allocating jmethodIDs.
+    no_shared_spaces("CDS is not compatible with TSAN");
   );
 
   return JNI_OK;
