@@ -229,7 +229,12 @@ main(int argc, char **argv)
  */
 __attribute__((visibility("default"))) const char *__tsan_default_suppressions() {
   return ("called_from_lib:/libjvm.so\n"
-          "called_from_lib:/libjimage.so\n");
+          "called_from_lib:/libjimage.so\n"
+          // Intentional races in java.lang.invoke.* related to counters
+          "race:^java.lang.invoke.\n"
+          // classic lazy init on String.hash
+          // TODO: use field suppression
+          "race_top:^java.lang.String.hashCode\n");
 }
 
 __attribute__((visibility("default"))) void __tsan_symbolize_external_ex(
