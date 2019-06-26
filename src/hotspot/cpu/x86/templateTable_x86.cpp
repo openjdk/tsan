@@ -806,6 +806,15 @@ void TemplateTable::tsan_observe_get_or_put(
   // This really only needs to be done for some of the float/double accesses,
   // but it's here because it's cleaner.
   __ push_d(xmm0);
+  DEBUG_ONLY(
+    __ pusha();
+    __ movptr(c_rarg0, field.base());
+    __ leaq(c_rarg1, field);
+    __ subq(c_rarg1, field.base());
+    __ call_VM_leaf(CAST_FROM_FN_PTR(address, SharedRuntime::verify_oop_index),
+                    c_rarg0 /* oop */, c_rarg1 /* index */);
+    __ popa();
+  );
   // For volatile reads/writes use an acquire/release.
   // If a reference is annotated to be ignored, assume it's safe to
   // access the object it's referring to and create a happens-before relation
@@ -853,6 +862,15 @@ void TemplateTable::tsan_observe_load_or_store(
   // This really only needs to be done for some of the float/double accesses,
   // but it's here because it's cleaner.
   __ push_d(xmm0);
+  DEBUG_ONLY(
+    __ pusha();
+    __ movptr(c_rarg0, field.base());
+    __ leaq(c_rarg1, field);
+    __ subq(c_rarg1, field.base());
+    __ call_VM_leaf(CAST_FROM_FN_PTR(address, SharedRuntime::verify_oop_index),
+                    c_rarg0 /* oop */, c_rarg1 /* index */);
+    __ popa();
+  );
   __ leaq(c_rarg0, field);
   __ get_method(c_rarg1);
   __ call_VM_leaf(CAST_FROM_FN_PTR(address, tsan_function),
@@ -870,8 +888,8 @@ void TemplateTable::iaload() {
   index_check(rdx, rax); // kills rbx
   Address addr(rdx, rax, Address::times_4,
                arrayOopDesc::base_offset_in_bytes(T_INT));
-  __ access_load_at(T_INT, IN_HEAP | IS_ARRAY, rax, addr, noreg, noreg);
   TSAN_RUNTIME_ONLY(tsan_observe_load_or_store(addr, SharedRuntime::tsan_read4));
+  __ access_load_at(T_INT, IN_HEAP | IS_ARRAY, rax, addr, noreg, noreg);
 }
 
 void TemplateTable::laload() {
@@ -883,9 +901,9 @@ void TemplateTable::laload() {
   // rbx,: index
   Address addr(rdx, rbx, Address::times_8,
                arrayOopDesc::base_offset_in_bytes(T_LONG));
+  TSAN_RUNTIME_ONLY(tsan_observe_load_or_store(addr, SharedRuntime::tsan_read8));
   __ access_load_at(T_LONG, IN_HEAP | IS_ARRAY, noreg /* ltos */, addr, noreg,
                     noreg);
-  TSAN_RUNTIME_ONLY(tsan_observe_load_or_store(addr, SharedRuntime::tsan_read8));
 }
 
 
@@ -897,9 +915,9 @@ void TemplateTable::faload() {
   index_check(rdx, rax); // kills rbx
   Address addr(rdx, rax, Address::times_4,
                arrayOopDesc::base_offset_in_bytes(T_FLOAT));
+  TSAN_RUNTIME_ONLY(tsan_observe_load_or_store(addr, SharedRuntime::tsan_read4));
   __ access_load_at(T_FLOAT, IN_HEAP | IS_ARRAY, noreg /* ftos */, addr, noreg,
                     noreg);
-  TSAN_RUNTIME_ONLY(tsan_observe_load_or_store(addr, SharedRuntime::tsan_read4));
 }
 
 void TemplateTable::daload() {
@@ -909,9 +927,9 @@ void TemplateTable::daload() {
   index_check(rdx, rax); // kills rbx
   Address addr(rdx, rax, Address::times_8,
                arrayOopDesc::base_offset_in_bytes(T_DOUBLE));
+  TSAN_RUNTIME_ONLY(tsan_observe_load_or_store(addr, SharedRuntime::tsan_read8));
   __ access_load_at(T_DOUBLE, IN_HEAP | IS_ARRAY, noreg /* dtos */, addr, noreg,
                     noreg);
-  TSAN_RUNTIME_ONLY(tsan_observe_load_or_store(addr, SharedRuntime::tsan_read8));
 }
 
 void TemplateTable::aaload() {
@@ -922,10 +940,6 @@ void TemplateTable::aaload() {
   Address addr(rdx, rax,
                UseCompressedOops ? Address::times_4 : Address::times_ptr,
                arrayOopDesc::base_offset_in_bytes(T_OBJECT));
-  // The TSAN instrumentation really should be after the load for consistency
-  // with other reads, but it doesn't matter here since there are no
-  // acquires/releases here.
-  // do_oop_load() clobbers rdx, so do the TSAN instrumentation first.
   TSAN_RUNTIME_ONLY(tsan_observe_load_or_store(
       addr, UseCompressedOops ? SharedRuntime::tsan_read4
                               : SharedRuntime::tsan_read8));
@@ -939,8 +953,8 @@ void TemplateTable::baload() {
   index_check(rdx, rax); // kills rbx
   Address addr(rdx, rax, Address::times_1,
                arrayOopDesc::base_offset_in_bytes(T_BYTE));
-  __ access_load_at(T_BYTE, IN_HEAP | IS_ARRAY, rax, addr, noreg, noreg);
   TSAN_RUNTIME_ONLY(tsan_observe_load_or_store(addr, SharedRuntime::tsan_read1));
+  __ access_load_at(T_BYTE, IN_HEAP | IS_ARRAY, rax, addr, noreg, noreg);
 }
 
 void TemplateTable::caload() {
@@ -950,8 +964,8 @@ void TemplateTable::caload() {
   index_check(rdx, rax); // kills rbx
   Address addr(rdx, rax, Address::times_2,
                arrayOopDesc::base_offset_in_bytes(T_CHAR));
-  __ access_load_at(T_CHAR, IN_HEAP | IS_ARRAY, rax, addr, noreg, noreg);
   TSAN_RUNTIME_ONLY(tsan_observe_load_or_store(addr, SharedRuntime::tsan_read2));
+  __ access_load_at(T_CHAR, IN_HEAP | IS_ARRAY, rax, addr, noreg, noreg);
 }
 
 // iload followed by caload frequent pair
@@ -977,8 +991,8 @@ void TemplateTable::saload() {
   index_check(rdx, rax); // kills rbx
   Address addr(rdx, rax, Address::times_2,
                arrayOopDesc::base_offset_in_bytes(T_SHORT));
-  __ access_load_at(T_SHORT, IN_HEAP | IS_ARRAY, rax, addr, noreg, noreg);
   TSAN_RUNTIME_ONLY(tsan_observe_load_or_store(addr, SharedRuntime::tsan_read2));
+  __ access_load_at(T_SHORT, IN_HEAP | IS_ARRAY, rax, addr, noreg, noreg);
 }
 
 void TemplateTable::iload(int n) {

@@ -1042,6 +1042,14 @@ JRT_LEAF(int, SharedRuntime::dtrace_method_exit(
 JRT_END
 
 #if INCLUDE_TSAN
+
+JRT_LEAF(void, SharedRuntime::verify_oop_index(oopDesc* obj, int index))
+  assert(oopDesc::is_oop(obj), "invalid oop");
+  assert(index >= 0, "index is less than 0");
+  int obj_size_in_bytes = obj->size() * HeapWordSize;
+  assert(index < obj_size_in_bytes, "index %d >= obj size %d", index, obj_size_in_bytes);
+JRT_END
+
 // TSAN: method entry callback from interpreter
 // (1) In order to have the line numbers in the call stack, we use the caller
 //     address instead of the method that's being called. This also matches

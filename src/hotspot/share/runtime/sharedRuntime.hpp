@@ -319,6 +319,9 @@ class SharedRuntime: AllStatic {
   // which are listed in tsanExternalDecls.hpp. The VM uses only these
   // functions to push events to ThreadSanitizer.
 
+  // Verify that an oop is valid and that the index is within the object size.
+  static void verify_oop_index(oopDesc* obj, int index);
+
   // Java method entry/exit from code run by template interpreter
   static void tsan_interp_method_entry(JavaThread *thread);
   static void tsan_interp_method_exit();
