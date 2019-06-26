@@ -234,7 +234,9 @@ __attribute__((visibility("default"))) const char *__tsan_default_suppressions()
           "race:^java.lang.invoke.\n"
           // classic lazy init on String.hash
           // TODO: use field suppression
-          "race_top:^java.lang.String.hashCode\n");
+          "race_top:^java.lang.String.hashCode\n"
+          // Suppress known, benign races in j.c.u
+          "race_top:^java.util.concurrent.ConcurrentHashMap\n");
 }
 
 __attribute__((visibility("default"))) void __tsan_symbolize_external_ex(
