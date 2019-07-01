@@ -34,6 +34,9 @@
 #include "classfile/moduleEntry.hpp"
 #include "classfile/symbolTable.hpp"
 #include "classfile/systemDictionary.hpp"
+#if INCLUDE_TSAN
+#include "classfile/tsanIgnoreList.hpp"
+#endif // INCLUDE_TSAN
 #include "classfile/verificationType.hpp"
 #include "classfile/verifier.hpp"
 #include "classfile/vmSymbols.hpp"
@@ -1686,6 +1689,13 @@ void ClassFileParser::parse_fields(const ClassFileStream* const cfs,
     // Remember how many oops we encountered and compute allocation type
     const FieldAllocationType atype = fac->update(is_static, type);
     field->set_allocation_type(atype);
+
+    TSAN_RUNTIME_ONLY(
+      if (ThreadSanitizerIgnoreFile != NULL &&
+          TsanIgnoreList::match(_class_name, name, type)) {
+        parsed_annotations.set_tsan_ignore(true);
+      }
+    );
 
     // After field is initialized with type, we can augment it with aux info
     if (parsed_annotations.has_any_annotations())

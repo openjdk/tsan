@@ -2549,7 +2549,12 @@ define_pd_global(uint64_t,MaxRAM,                    1ULL*G);
                                                                             \
   TSAN_ONLY(product(bool, ThreadSanitizerJavaMemory, true,                  \
           "Detect Java data races with ThreadSanitizer. "                   \
-          "This is only enabled if -XX:+ThreadSanitizer is set."))
+          "This is only enabled if -XX:+ThreadSanitizer is set."))          \
+                                                                            \
+  TSAN_ONLY(product(ccstr, ThreadSanitizerIgnoreFile, NULL,                 \
+          "File containing a list of ignored field patterns for "           \
+          "ThreadSanitizer."))                                              \
+
 
 #define VM_FLAGS(develop,                                                   \
                  develop_pd,                                                \

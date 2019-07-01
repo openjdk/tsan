@@ -23,6 +23,7 @@
  *
  */
 
+#include "classfile/tsanIgnoreList.hpp"
 #include "gc/shared/collectedHeap.hpp"
 #include "memory/universe.hpp"
 #include "oops/method.hpp"
@@ -35,6 +36,7 @@
 
 jint tsan_init() {
   TsanOopMap::initialize_map();  // This is probably early enough.
+  TsanIgnoreList::init();
   if (__tsan_java_init == NULL) {  // We always need tsan runtime functions.
     vm_shutdown_during_initialization("libtsan cannot be located");
     return JNI_ERR;

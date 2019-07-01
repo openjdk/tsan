@@ -1,0 +1,7 @@
+# comment
+FieldIgnoreLoopRunner x
+# some other comment
+FieldIgnoreAnyPrimitiveLoopRunner *
+FieldIgnoreAnyReferenceLoopRunner *
+
+FieldIgnorePrefixLoopRunner tsanIsAwe*
