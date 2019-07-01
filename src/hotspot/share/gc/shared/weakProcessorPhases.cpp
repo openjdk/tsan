@@ -38,6 +38,10 @@
 #include "prims/jvmtiExport.hpp"
 #endif // INCLUDE_JVMTI
 
+#if INCLUDE_TSAN
+#include "tsan/tsanOopMap.hpp"
+#endif // INCLUDE_TSAN
+
 WeakProcessorPhases::Phase WeakProcessorPhases::phase(uint value) {
   assert(value < phase_count, "Invalid phase value %u", value);
   return static_cast<Phase>(value);
@@ -62,7 +66,7 @@ uint WeakProcessorPhases::oop_storage_index(Phase phase) {
 bool WeakProcessorPhases::is_serial(Phase phase) {
   // serial_phase_count is 0 if JFR and JVMTI are both not built,
   // making this check with unsigned lhs redundant
-#if INCLUDE_JVMTI || INCLUDE_JFR
+#if INCLUDE_JVMTI || INCLUDE_JFR || INCLUDE_TSAN
   return (index(phase) - serial_phase_start) < serial_phase_count;
 #else
   STATIC_ASSERT(serial_phase_count == 0);
@@ -78,6 +82,7 @@ const char* WeakProcessorPhases::description(Phase phase) {
   switch (phase) {
   JVMTI_ONLY(case jvmti: return "JVMTI weak processing";)
   JFR_ONLY(case jfr: return "JFR weak processing";)
+  TSAN_ONLY(case tsan: return "TSAN weak processing";)
   case jni: return "JNI weak processing";
   case stringtable: return "StringTable weak processing";
   case vm: return "VM weak processing";
@@ -91,6 +96,7 @@ WeakProcessorPhases::Processor WeakProcessorPhases::processor(Phase phase) {
   switch (phase) {
   JVMTI_ONLY(case jvmti: return &JvmtiExport::weak_oops_do;)
   JFR_ONLY(case jfr: return &Jfr::weak_oops_do;)
+  TSAN_ONLY(case tsan: return &TsanOopMap::weak_oops_do;)
   default:
     ShouldNotReachHere();
     return NULL;

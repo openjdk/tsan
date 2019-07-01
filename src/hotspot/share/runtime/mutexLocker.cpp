@@ -137,6 +137,10 @@ Mutex*   JfrStream_lock               = NULL;
 Monitor* JfrThreadSampler_lock        = NULL;
 #endif
 
+#if INCLUDE_TSAN
+Mutex*   TsanOopMap_lock              = NULL;
+#endif
+
 #ifndef SUPPORTS_NATIVE_CX8
 Mutex*   UnsafeJlong_lock             = NULL;
 #endif
@@ -327,6 +331,10 @@ void mutex_init() {
   def(JfrStacktrace_lock           , PaddedMutex  , special,     true,  Monitor::_safepoint_check_sometimes);
   def(JfrThreadSampler_lock        , PaddedMonitor, leaf,        true,  Monitor::_safepoint_check_never);
 #endif
+
+  TSAN_RUNTIME_ONLY(
+    def(TsanOopMap_lock            , PaddedMutex  , special,     true,  Monitor::_safepoint_check_never);
+  );
 
 #ifndef SUPPORTS_NATIVE_CX8
   def(UnsafeJlong_lock             , PaddedMutex  , special,     false, Monitor::_safepoint_check_never);

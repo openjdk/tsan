@@ -249,6 +249,9 @@ void MemAllocator::Allocation::notify_allocation() {
   notify_allocation_jfr_sampler();
   notify_allocation_dtrace_sampler();
   notify_allocation_jvmti_sampler();
+  TSAN_RUNTIME_ONLY(
+      SharedRuntime::tsan_track_obj_with_size(obj(), (int)_allocator._word_size);
+  );
 }
 
 HeapWord* MemAllocator::allocate_outside_tlab(Allocation& allocation) const {

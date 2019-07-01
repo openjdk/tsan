@@ -25,6 +25,7 @@
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
+import jdk.test.lib.management.InputArguments;
 import jdk.test.lib.process.OutputAnalyzer;
 import jdk.test.lib.process.ProcessTools;
 
@@ -36,11 +37,12 @@ public class TsanRunner {
   private static OutputAnalyzer runTsanTest(Class<?> klass, String... vmArgs) throws IOException {
     ArrayList<String> vmOpts = new ArrayList<>();
 
-    String testVmOptsStr = System.getProperty("test.java.opts");
-    if (!testVmOptsStr.isEmpty()) {
-      String[] testVmOpts = testVmOptsStr.split(" ");
-      Collections.addAll(vmOpts, testVmOpts);
-    }
+    // Pass all VM options passed to this process, which include
+    // all JTREG's system properties, and VM options from "test.vm.opts"
+    // system property and from @run tag.
+    String[] vmInputArgs = InputArguments.getVmInputArgs();
+    Collections.addAll(vmOpts, vmInputArgs);
+
     Collections.addAll(vmOpts, vmArgs);
     vmOpts.add("-XX:+ThreadSanitizer");
     vmOpts.add(klass.getName());

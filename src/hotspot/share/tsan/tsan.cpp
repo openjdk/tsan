@@ -30,9 +30,11 @@
 #include "runtime/safepointVerifiers.hpp"
 #include "runtime/sharedRuntime.hpp"
 #include "tsan/tsanExternalDecls.hpp"
+#include "tsan/tsanOopMap.hpp"
 #include "utilities/globalDefinitions.hpp"
 
 jint tsan_init() {
+  TsanOopMap::initialize_map();  // This is probably early enough.
   if (__tsan_java_init == NULL) {  // We always need tsan runtime functions.
     vm_shutdown_during_initialization("libtsan cannot be located");
     return JNI_ERR;
@@ -47,6 +49,7 @@ void tsan_exit() {
   if (status != 0) {
     vm_direct_exit(status);
   }
+  TsanOopMap::destroy();
 }
 
 // The type of the callback TSAN passes to __tsan_symbolize_external_ex.

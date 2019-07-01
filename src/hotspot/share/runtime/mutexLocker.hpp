@@ -140,6 +140,9 @@ extern Mutex*   JfrBuffer_lock;                  // protects JFR buffer operatio
 extern Mutex*   JfrStream_lock;                  // protects JFR stream access
 extern Monitor* JfrThreadSampler_lock;           // used to suspend/resume JFR thread sampler
 #endif
+#if INCLUDE_TSAN
+extern Mutex*   TsanOopMap_lock;                 // guards shared map of oops
+#endif
 
 #ifndef SUPPORTS_NATIVE_CX8
 extern Mutex*   UnsafeJlong_lock;                // provides Unsafe atomic updates to jlongs on platforms that don't support cx8

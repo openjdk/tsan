@@ -79,6 +79,7 @@
 #endif
 #if INCLUDE_TSAN
 #include "tsan/tsanExternalDecls.hpp"
+#include "tsan/tsanOopMap.hpp"
 #endif
 
 // Shared stub locations
@@ -1094,6 +1095,7 @@ void SharedRuntime::tsan_oop_lock(Thread* thread, oop obj) {
   assert(obj != NULL, "null oop");
   assert(oopDesc::is_oop(obj), "invalid oop");
 
+  TsanOopMap::add_oop(obj);
   __tsan_java_mutex_lock((julong)(address)obj);
 }
 
@@ -1103,6 +1105,7 @@ void SharedRuntime::tsan_oop_unlock(Thread *thread, oop obj) {
   assert(thread != NULL, "null thread");
   assert(obj != NULL, "null oop");
   assert(oopDesc::is_oop(obj), "invalid oop");
+  assert(TsanOopMap::exists(obj), "oop seen in unlock but not tracked");
 
   __tsan_java_mutex_unlock((julong)(address)obj);
 }
@@ -1114,6 +1117,7 @@ void SharedRuntime::tsan_oop_rec_lock(Thread* thread, oop obj, int rec) {
   assert(obj != NULL, "null oop");
   assert(oopDesc::is_oop(obj), "invalid oop");
 
+  TsanOopMap::add_oop(obj);
   __tsan_java_mutex_lock_rec((julong)(address)obj, rec);
 }
 
@@ -1123,6 +1127,7 @@ int SharedRuntime::tsan_oop_rec_unlock(Thread *thread, oop obj) {
   assert(thread != NULL, "null thread");
   assert(obj != NULL, "null oop");
   assert(oopDesc::is_oop(obj), "invalid oop");
+  assert(TsanOopMap::exists(obj), "oop seen in unlock but not tracked");
 
   return __tsan_java_mutex_unlock_rec((julong)(address)obj);
 }
@@ -1149,6 +1154,22 @@ JRT_LEAF(void, SharedRuntime::tsan_interp_unlock(JavaThread* thread,
 
   assert(obj == elem->obj(), "oop changed");
   DEBUG_ONLY(thread->last_frame().interpreter_frame_verify_monitor(elem);)
+JRT_END
+
+// Should be JRT_LEAF, but this is called very early during VM startup, so we
+// are sometimes in '_thread_in_vm' state.
+// NOTE: DO NOT add operations that can safepoint, enter GC, or throw an
+// exception!
+void SharedRuntime::tsan_track_obj_with_size(oopDesc* obj, int size) {
+  assert(ThreadSanitizer, "Need -XX:+ThreadSanitizer");
+  assert(oopDesc::is_oop(obj), "Bad oopDesc passed to tsan_track_obj_with_size().");
+  TsanOopMap::add_oop_with_size(obj, size);
+}
+
+JRT_LEAF(void, SharedRuntime::tsan_track_obj(oopDesc* obj))
+  assert(ThreadSanitizer, "Need -XX:+ThreadSanitizer");
+  assert(oopDesc::is_oop(obj), "Bad oopDesc passed to tsan_track_obj().");
+  TsanOopMap::add_oop(obj);
 JRT_END
 
 // TODO: Make tsan_acquire/release JRT_LEAF

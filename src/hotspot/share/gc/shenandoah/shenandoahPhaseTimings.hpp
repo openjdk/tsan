@@ -317,6 +317,7 @@ class outputStream;
   f(JNIRoots,                "JNI Handles Roots (ms):")         \
   f(JVMTIWeakRoots,          "JVMTI Weak Roots (ms):")          \
   f(JFRWeakRoots,            "JFR Weak Roots (ms):")            \
+  f(TSANWeakRoots,           "TSAN Weak Roots (ms):")           \
   f(JNIWeakRoots,            "JNI Weak Roots (ms):")            \
   f(StringTableRoots,        "StringTable Roots(ms):")          \
   f(VMWeakRoots,             "VM Weak Roots(ms)")               \

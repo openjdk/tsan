@@ -4303,6 +4303,14 @@ void TemplateTable::_new() {
       __ pop(atos);
     }
 
+    TSAN_RUNTIME_ONLY(
+      // return value of new oop is in rax.
+      __ push(atos);
+      __ call_VM_leaf(CAST_FROM_FN_PTR(address, SharedRuntime::tsan_track_obj),
+                      rax);
+      __ pop(atos);
+    );
+
     __ jmp(done);
   }
 

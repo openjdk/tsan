@@ -41,6 +41,7 @@ public:
     // Serial phases.
     JVMTI_ONLY(jvmti COMMA)
     JFR_ONLY(jfr COMMA)
+    TSAN_ONLY(tsan COMMA)
 
     // OopStorage phases.
     jni,

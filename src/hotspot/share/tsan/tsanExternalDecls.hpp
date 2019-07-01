@@ -48,6 +48,13 @@ extern "C" {
   void __tsan_func_entry(void *pc) WEAK;
   void __tsan_func_exit() WEAK;
 
+  // Called when a Java object is allocated.
+  void __tsan_java_alloc(void *addr, unsigned long size) WEAK;
+  // Called at STW GC for all live but moved oops tracked by Tsan.
+  void __tsan_java_move(void *src, void *dst, unsigned long size) WEAK;
+  // Called at STW GC after an oop is collected.
+  void __tsan_java_free(void *addr, unsigned long size) WEAK;
+
   // Called when a thread enters an oop monitor.
   void __tsan_java_mutex_lock(julong addr) WEAK;
   // Called when a thread exits an oop monitor.

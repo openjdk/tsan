@@ -342,6 +342,10 @@ class SharedRuntime: AllStatic {
   static void tsan_acquire(void* address);
   static void tsan_release(void* address);
 
+  // Called whenever an obj is created.
+  static void tsan_track_obj_with_size(oopDesc* obj, int size);
+  static void tsan_track_obj(oopDesc* obj);
+
   // Memory reads/writes from code run by template interpreter
   static void tsan_read1(void* addr, Method* method, address bcp);
   static void tsan_read2(void* addr, Method* method, address bcp);

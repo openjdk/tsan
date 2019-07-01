@@ -53,6 +53,9 @@ static const struct PhaseMap phase_mapping[] = {
 #if INCLUDE_JFR
   {WeakProcessorPhases::jfr,         ShenandoahPhaseTimings::JFRWeakRoots},
 #endif
+#if INCLUDE_TSAN
+  {WeakProcessorPhases::tsan,        ShenandoahPhaseTimings::TSANWeakRoots},
+#endif
   {WeakProcessorPhases::jni,         ShenandoahPhaseTimings::JNIWeakRoots},
   {WeakProcessorPhases::stringtable, ShenandoahPhaseTimings::StringTableRoots},
   {WeakProcessorPhases::vm,          ShenandoahPhaseTimings::VMWeakRoots}
