@@ -291,7 +291,14 @@ namespace TsanOopMapImpl {
           // The object survived GC, add its updated oop to the new oops map.
           oop target_oop = cast_to_oop((intptr_t)source_obj);
           pointer_adjuster->do_oop(&target_oop);
-          assert(heap->is_in(target_oop), "Adjustment failed");
+          // The memory pointed by target_oop may not be a valid oop yet,
+          // for example the G1 full collector needs to adjust all pointers
+          // first, then compacts and moves the objects. In this case
+          // TsanOopSizeMap::rebuild_oops_map() is called during the adjust-
+          // pointer phase, before the collector moves the objects. Thus,
+          // we cannot use heap->is_in() or oopDesc::is_oop() to check
+          // target_oop.
+          assert(heap->is_in_reserved(target_oop), "Adjustment failed");
           oopDesc *target_obj = target_oop;
           new_map->put(target_obj, obj_size);
           if (target_obj == source_obj) {
