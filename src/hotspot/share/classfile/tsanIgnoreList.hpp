@@ -26,6 +26,9 @@
 #ifndef SHARE_CLASSFILE_TSANIGNORELIST_HPP
 #define SHARE_CLASSFILE_TSANIGNORELIST_HPP
 
+#include "memory/allocation.hpp"
+#include "oops/symbol.hpp"
+
 class FieldMatcher;
 
 // Loads a whitelist file (-XX:ThreadSanitizerIgnoreFile) containing class names

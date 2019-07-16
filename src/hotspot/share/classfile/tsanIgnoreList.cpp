@@ -26,6 +26,7 @@
 #include "precompiled.hpp"
 #include "classfile/tsanIgnoreList.hpp"
 #include "classfile/symbolTable.hpp"
+#include "memory/resourceArea.inline.hpp"
 
 static const int MAX_LINE_SIZE  = 1024;
 
