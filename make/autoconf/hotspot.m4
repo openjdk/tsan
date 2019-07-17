@@ -553,6 +553,27 @@ AC_DEFUN_ONCE([HOTSPOT_SETUP_JVM_FEATURES],
     fi
   fi
 
+  # Add a configure option --<enable|disable>-tsan-launcher to allow
+  # more control on whether to link TSAN runtime with the launcher.
+  AC_ARG_ENABLE([tsan-launcher], [AS_HELP_STRING([--enable-tsan-launcher],
+      [link tsan runtime with the default JDK launcher. Default is consistent with whether tsan feature is enabled.])])
+  AC_MSG_CHECKING([if tsan should be linked with JDK launcher])
+  if test "x$INCLUDE_TSAN" = "xtrue"; then
+    if test "x$enable_tsan_launcher" = "xyes"; then
+      AC_MSG_RESULT([yes, forced])
+    elif test "x$enable_tsan_launcher" = "xno"; then
+      AC_MSG_RESULT([no, forced])
+      INCLUDE_TSAN="false"
+    else
+      AC_MSG_RESULT([yes, default])
+    fi
+  else
+    AC_MSG_RESULT([no, tsan feature is disabled])
+    if test "x$enable_tsan_launcher" = "xyes"; then
+      AC_MSG_ERROR([--enable-tsan-launcher can only be used when tsan feature is enabled.])
+    fi
+  fi
+
   AC_SUBST(INCLUDE_TSAN)
 
   # Enable features depending on variant.
