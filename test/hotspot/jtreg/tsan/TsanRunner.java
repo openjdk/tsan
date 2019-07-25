@@ -34,7 +34,7 @@ import jdk.test.lib.process.ProcessTools;
  * ProcessBuilder; returning the OutputAnalyzer of the process.
  */
 public class TsanRunner {
-  private static OutputAnalyzer runTsanTest(Class<?> klass, String... vmArgs) throws IOException {
+  public static OutputAnalyzer runTsanTest(Class<?> klass, String... vmArgs) throws IOException {
     ArrayList<String> vmOpts = new ArrayList<>();
 
     // Pass all VM options passed to this process, which include

@@ -36,6 +36,15 @@
 abstract class AbstractLoop {
   static final int LOOPS = 50000;
 
+  static final Thread.UncaughtExceptionHandler HANDLER = new Thread.UncaughtExceptionHandler() {
+    @Override
+    public void uncaughtException(Thread th, Throwable ex) {
+      System.err.println("Uncaught Exception in thread " + th.getName());
+      ex.printStackTrace();
+      System.exit(1);
+    }
+  };
+
   /**
    * Implement this method.
    */
@@ -61,6 +70,8 @@ abstract class AbstractLoop {
   final void runInTwoThreads() throws InterruptedException {
     System.err.println("Begin " + name);
 
+    t1.setUncaughtExceptionHandler(HANDLER);
+    t2.setUncaughtExceptionHandler(HANDLER);
     t1.start();
     t2.start();
 
