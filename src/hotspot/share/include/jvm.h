@@ -282,6 +282,12 @@ JNIEXPORT jobjectArray JNICALL
 JVM_GetSystemPackages(JNIEnv *env);
 
 /*
+ * java.lang.ref.Finalizer
+ */
+JNIEXPORT jboolean JNICALL
+JVM_GetTsanEnabled(JNIEnv *env);
+
+/*
  * java.lang.ref.Reference
  */
 JNIEXPORT jobject JNICALL

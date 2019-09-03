@@ -84,6 +84,11 @@ final class Finalizer extends FinalReference<Object> { /* Package-private; must 
         try {
             Object finalizee = this.get();
             if (finalizee != null && !(finalizee instanceof java.lang.Enum)) {
+                if (TSAN_ENABLED) {
+                  // TODO: Move this call to when a batch of finalizers
+                  // are added to the queue.
+                  tsanFinalize();
+                }
                 jla.invokeFinalize(finalizee);
 
                 // Clear stack slot containing this variable, to decrease
@@ -175,6 +180,10 @@ final class Finalizer extends FinalReference<Object> { /* Package-private; must 
             }
         }
     }
+
+    private final static boolean TSAN_ENABLED = isTsanEnabled();
+    private static native boolean isTsanEnabled();
+    private native void tsanFinalize();
 
     static {
         ThreadGroup tg = Thread.currentThread().getThreadGroup();

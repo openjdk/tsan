@@ -295,9 +295,11 @@
         code; \
       } \
     } while (0)
+#define NOT_TSAN(code)
 #else
 #define TSAN_ONLY(code)
 #define TSAN_RUNTIME_ONLY(code)
+#define NOT_TSAN(code) code
 #endif
 
 #ifndef INCLUDE_JVMCI

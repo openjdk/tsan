@@ -127,6 +127,7 @@ JVM_GetStackAccessControlContext
 JVM_GetSystemPackage
 JVM_GetSystemPackages
 JVM_GetTemporaryDirectory
+JVM_GetTsanEnabled
 JVM_GetVmArguments
 JVM_Halt
 JVM_HasReferencePendingList

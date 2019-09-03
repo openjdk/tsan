@@ -3170,6 +3170,15 @@ JVM_ENTRY(jobjectArray, JVM_GetSystemPackages(JNIEnv *env))
 JVM_END
 
 
+// java.lang.ref.Finalizer ///////////////////////////////////////////////////////////////
+
+JVM_ENTRY(jboolean, JVM_GetTsanEnabled(JNIEnv *env))
+  JVMWrapper("JVM_GetTsanEnabled");
+  TSAN_ONLY(return ThreadSanitizer;)
+  NOT_TSAN(return JNI_FALSE;)
+JVM_END
+
+
 // java.lang.ref.Reference ///////////////////////////////////////////////////////////////
 
 
