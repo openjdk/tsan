@@ -46,9 +46,16 @@ abstract class AbstractLoop {
   };
 
   /**
-   * Implement this method.
+   * Implement only this method for symmetric behavior.
    */
   protected abstract void run(int i);
+
+  /**
+   * Override this method for asymmetric behavior.
+   */
+  protected void run2(int i) {
+    run(i);
+  }
 
   // Threads pulled out to allow direct reference
   final Thread t1 =
@@ -63,7 +70,7 @@ abstract class AbstractLoop {
       new Thread(
           () -> {
             for (int i = 0; i < LOOPS; i++) {
-              AbstractLoop.this.run(i);
+              AbstractLoop.this.run2(i);
             }
           });
 

@@ -51,6 +51,10 @@
 #include "utilities/copy.hpp"
 #include "utilities/dtrace.hpp"
 #include "utilities/macros.hpp"
+#if INCLUDE_TSAN
+#include "runtime/sharedRuntime.hpp"
+#include "tsan/tsanExternalDecls.hpp"
+#endif
 
 /**
  * Implementation of the jdk.internal.misc.Unsafe class
@@ -262,6 +266,14 @@ UNSAFE_ENTRY(jobject, Unsafe_GetReference(JNIEnv *env, jobject unsafe, jobject o
   oop p = JNIHandles::resolve(obj);
   assert_field_offset_sane(p, offset);
   oop v = HeapAccess<ON_UNKNOWN_OOP_REF>::oop_load_at(p, offset);
+  TSAN_RUNTIME_ONLY(
+    void* addr = index_oop_from_field_offset_long(p, offset);
+    if (UseCompressedOops) {
+      __tsan_read4_pc(addr, SharedRuntime::tsan_code_location(0, 0));
+    } else {
+      __tsan_read8_pc(addr, SharedRuntime::tsan_code_location(0, 0));
+    }
+  );
   return JNIHandles::make_local(env, v);
 } UNSAFE_END
 
@@ -269,6 +281,14 @@ UNSAFE_ENTRY(void, Unsafe_PutReference(JNIEnv *env, jobject unsafe, jobject obj,
   oop x = JNIHandles::resolve(x_h);
   oop p = JNIHandles::resolve(obj);
   assert_field_offset_sane(p, offset);
+  TSAN_RUNTIME_ONLY(
+    void* addr = index_oop_from_field_offset_long(p, offset);
+    if (UseCompressedOops) {
+      __tsan_write4_pc(addr, SharedRuntime::tsan_code_location(0, 0));
+    } else {
+      __tsan_write8_pc(addr, SharedRuntime::tsan_code_location(0, 0));
+    }
+  );
   HeapAccess<ON_UNKNOWN_OOP_REF>::oop_store_at(p, offset, x);
 } UNSAFE_END
 
@@ -303,26 +323,35 @@ UNSAFE_LEAF(jint, Unsafe_unalignedAccess0(JNIEnv *env, jobject unsafe)) {
   return UseUnalignedAccesses;
 } UNSAFE_END
 
-#define DEFINE_GETSETOOP(java_type, Type) \
+#define DEFINE_GETSETOOP(java_type, Type, size) \
  \
 UNSAFE_ENTRY(java_type, Unsafe_Get##Type(JNIEnv *env, jobject unsafe, jobject obj, jlong offset)) { \
-  return MemoryAccess<java_type>(thread, obj, offset).get(); \
+  java_type ret = MemoryAccess<java_type>(thread, obj, offset).get(); \
+  TSAN_RUNTIME_ONLY( \
+    void* addr = index_oop_from_field_offset_long(JNIHandles::resolve(obj), offset); \
+    __tsan_read##size##_pc(addr, SharedRuntime::tsan_code_location(0, 0)); \
+  ); \
+  return ret; \
 } UNSAFE_END \
  \
 UNSAFE_ENTRY(void, Unsafe_Put##Type(JNIEnv *env, jobject unsafe, jobject obj, jlong offset, java_type x)) { \
+  TSAN_RUNTIME_ONLY( \
+    void* addr = index_oop_from_field_offset_long(JNIHandles::resolve(obj), offset); \
+    __tsan_write##size##_pc(addr, SharedRuntime::tsan_code_location(0, 0)); \
+  ); \
   MemoryAccess<java_type>(thread, obj, offset).put(x); \
 } UNSAFE_END \
  \
 // END DEFINE_GETSETOOP.
 
-DEFINE_GETSETOOP(jboolean, Boolean)
-DEFINE_GETSETOOP(jbyte, Byte)
-DEFINE_GETSETOOP(jshort, Short);
-DEFINE_GETSETOOP(jchar, Char);
-DEFINE_GETSETOOP(jint, Int);
-DEFINE_GETSETOOP(jlong, Long);
-DEFINE_GETSETOOP(jfloat, Float);
-DEFINE_GETSETOOP(jdouble, Double);
+DEFINE_GETSETOOP(jboolean, Boolean, 1)
+DEFINE_GETSETOOP(jbyte, Byte, 1)
+DEFINE_GETSETOOP(jshort, Short, 2);
+DEFINE_GETSETOOP(jchar, Char, 2);
+DEFINE_GETSETOOP(jint, Int, 4);
+DEFINE_GETSETOOP(jlong, Long, 8);
+DEFINE_GETSETOOP(jfloat, Float, 4);
+DEFINE_GETSETOOP(jdouble, Double, 8);
 
 #undef DEFINE_GETSETOOP
 
