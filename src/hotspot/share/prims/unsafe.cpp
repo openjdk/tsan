@@ -296,6 +296,10 @@ UNSAFE_ENTRY(jobject, Unsafe_GetReferenceVolatile(JNIEnv *env, jobject unsafe, j
   oop p = JNIHandles::resolve(obj);
   assert_field_offset_sane(p, offset);
   oop v = HeapAccess<MO_SEQ_CST | ON_UNKNOWN_OOP_REF>::oop_load_at(p, offset);
+  TSAN_RUNTIME_ONLY(
+    void* addr = index_oop_from_field_offset_long(p, offset);
+    __tsan_java_acquire(addr);
+  );
   return JNIHandles::make_local(env, v);
 } UNSAFE_END
 
@@ -303,6 +307,10 @@ UNSAFE_ENTRY(void, Unsafe_PutReferenceVolatile(JNIEnv *env, jobject unsafe, jobj
   oop x = JNIHandles::resolve(x_h);
   oop p = JNIHandles::resolve(obj);
   assert_field_offset_sane(p, offset);
+  TSAN_RUNTIME_ONLY(
+    void* addr = index_oop_from_field_offset_long(p, offset);
+    __tsan_java_release(addr);
+  );
   HeapAccess<MO_SEQ_CST | ON_UNKNOWN_OOP_REF>::oop_store_at(p, offset, x);
 } UNSAFE_END
 
@@ -358,10 +366,19 @@ DEFINE_GETSETOOP(jdouble, Double, 8);
 #define DEFINE_GETSETOOP_VOLATILE(java_type, Type) \
  \
 UNSAFE_ENTRY(java_type, Unsafe_Get##Type##Volatile(JNIEnv *env, jobject unsafe, jobject obj, jlong offset)) { \
-  return MemoryAccess<java_type>(thread, obj, offset).get_volatile(); \
+  java_type ret = MemoryAccess<java_type>(thread, obj, offset).get_volatile(); \
+  TSAN_RUNTIME_ONLY( \
+    void* addr = index_oop_from_field_offset_long(JNIHandles::resolve(obj), offset); \
+    __tsan_java_acquire(addr); \
+  ); \
+  return ret; \
 } UNSAFE_END \
  \
 UNSAFE_ENTRY(void, Unsafe_Put##Type##Volatile(JNIEnv *env, jobject unsafe, jobject obj, jlong offset, java_type x)) { \
+  TSAN_RUNTIME_ONLY( \
+    void* addr = index_oop_from_field_offset_long(JNIHandles::resolve(obj), offset); \
+    __tsan_java_release(addr); \
+  ); \
   MemoryAccess<java_type>(thread, obj, offset).put_volatile(x); \
 } UNSAFE_END \
  \

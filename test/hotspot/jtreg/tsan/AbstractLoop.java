@@ -25,57 +25,58 @@
 /**
  * This class forms the basis for a regression suite against Tsan/Java.
  *
- * This class abstracts away the tedium of setting up two threads to run a method in a loop.
+ * <p>This class abstracts away the tedium of setting up two threads to run a method in a loop.
  * Usually, we want to run the same method in two threads.
  *
- * Usually, we want to set up a unique piece of shared data and access it in a variety of ways:
+ * <p>Usually, we want to set up a unique piece of shared data and access it in a variety of ways:
  * with synchronization, without, etc.
  *
- * Each subclass will override run().
+ * <p>Each subclass will override run().
  */
 abstract class AbstractLoop {
   static final int LOOPS = 50000;
+  static final int LOOPS_SYNC = 500;
 
-  static final Thread.UncaughtExceptionHandler HANDLER = new Thread.UncaughtExceptionHandler() {
-    @Override
-    public void uncaughtException(Thread th, Throwable ex) {
-      System.err.println("Uncaught Exception in thread " + th.getName());
-      ex.printStackTrace();
-      System.exit(1);
-    }
-  };
+  static final Thread.UncaughtExceptionHandler HANDLER =
+      new Thread.UncaughtExceptionHandler() {
+        @Override
+        public void uncaughtException(Thread th, Throwable ex) {
+          System.err.println("Uncaught Exception in thread " + th.getName());
+          ex.printStackTrace();
+          System.exit(1);
+        }
+      };
 
-  /**
-   * Implement only this method for symmetric behavior.
-   */
+  /** Implement only this method for symmetric behavior. */
   protected abstract void run(int i);
 
-  /**
-   * Override this method for asymmetric behavior.
-   */
+  /** Override this method for asymmetric behavior. */
   protected void run2(int i) {
     run(i);
   }
 
-  // Threads pulled out to allow direct reference
-  final Thread t1 =
-      new Thread(
-          () -> {
-            for (int i = 0; i < LOOPS; i++) {
-              AbstractLoop.this.run(i);
-            }
-          });
+  /** Called before an iteration in runInTwoThreadsSync(). */
+  protected void syncSetup() {
+  }
 
-  final Thread t2 =
-      new Thread(
-          () -> {
-            for (int i = 0; i < LOOPS; i++) {
-              AbstractLoop.this.run2(i);
-            }
-          });
-
+  /** Repeatedly run run() in one thread and run2() in another thread in parallel. */
   final void runInTwoThreads() throws InterruptedException {
     System.err.println("Begin " + name);
+
+    final Thread t1 =
+        new Thread(
+            () -> {
+              for (int i = 0; i < LOOPS; i++) {
+                AbstractLoop.this.run(i);
+              }
+            });
+    final Thread t2 =
+        new Thread(
+            () -> {
+              for (int i = 0; i < LOOPS; i++) {
+                AbstractLoop.this.run2(i);
+              }
+            });
 
     t1.setUncaughtExceptionHandler(HANDLER);
     t2.setUncaughtExceptionHandler(HANDLER);
@@ -88,9 +89,45 @@ abstract class AbstractLoop {
     System.err.println("End   " + name);
   }
 
+  /** Create two threads to run run() and run2() in parallel, then join them, then repeat. */
+  final void runInTwoThreadsSync() throws InterruptedException {
+    System.err.println("Begin " + name);
+
+    for (int i = 0; i < LOOPS_SYNC; i++) {
+      AbstractLoop.this.syncSetup();
+
+      final int x = i;
+      final Thread t1 =
+          new Thread(
+              () -> {
+                AbstractLoop.this.run(x);
+              });
+      final Thread t2 =
+          new Thread(
+              () -> {
+                AbstractLoop.this.run2(x);
+              });
+
+      t1.setUncaughtExceptionHandler(HANDLER);
+      t2.setUncaughtExceptionHandler(HANDLER);
+      if (i % 2 == 0) {
+        t1.start();
+        t2.start();
+      } else {
+        t2.start();
+        t1.start();
+      }
+
+      t1.join();
+      t2.join();
+    }
+
+    System.err.println("End   " + name);
+  }
+
   private String name;
-  // Default constructors will call this
-  AbstractLoop() {
+
+  public AbstractLoop() {
     name = this.getClass().getSimpleName();
   }
 }
