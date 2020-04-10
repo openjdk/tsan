@@ -3308,7 +3308,7 @@ void TemplateTable::putfield_or_static(int byte_no, bool is_static, RewriteContr
   __ movl(rdx, flags);
 
   // Check for volatile store
-  __ testl(rdx, rdx);
+  __ testl(rdx, 1 << ConstantPoolCacheEntry::is_volatile_shift);
   __ jcc(Assembler::zero, notVolatile);
 
   putfield_or_static_helper(byte_no, is_static, rc, obj, off, flags);
