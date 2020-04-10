@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017, 2019, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2017, 2020, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -25,7 +25,6 @@
 #include "precompiled.hpp"
 #include "code/codeCache.hpp"
 #include "gc/g1/g1CollectedHeap.hpp"
-#include "gc/g1/g1CollectorPolicy.hpp"
 #include "gc/g1/g1FullCollector.hpp"
 #include "gc/g1/g1FullGCAdjustTask.hpp"
 #include "gc/g1/g1FullGCCompactTask.hpp"
@@ -40,6 +39,7 @@
 #include "gc/shared/gcTraceTime.inline.hpp"
 #include "gc/shared/preservedMarks.hpp"
 #include "gc/shared/referenceProcessor.hpp"
+#include "gc/shared/verifyOption.hpp"
 #include "gc/shared/weakProcessor.inline.hpp"
 #include "gc/shared/workerPolicy.hpp"
 #include "logging/log.hpp"
@@ -183,7 +183,6 @@ void G1FullCollector::complete_collection() {
   update_derived_pointers();
 
   BiasedLocking::restore_marks();
-  JvmtiExport::gc_epilogue();
 
   _heap->prepare_heap_for_mutators();
 
@@ -199,13 +198,17 @@ void G1FullCollector::phase1_mark_live_objects() {
   // Recursively traverse all live objects and mark them.
   GCTraceTime(Info, gc, phases) info("Phase 1: Mark live objects", scope()->timer());
 
-  // Do the actual marking.
-  G1FullGCMarkTask marking_task(this);
-  run_task(&marking_task);
+  {
+    // Do the actual marking.
+    G1FullGCMarkTask marking_task(this);
+    run_task(&marking_task);
+  }
 
-  // Process references discovered during marking.
-  G1FullGCReferenceProcessingExecutor reference_processing(this);
-  reference_processing.execute(scope()->timer(), scope()->tracer());
+  {
+    // Process references discovered during marking.
+    G1FullGCReferenceProcessingExecutor reference_processing(this);
+    reference_processing.execute(scope()->timer(), scope()->tracer());
+  }
 
   // Weak oops cleanup.
   {
@@ -260,8 +263,7 @@ void G1FullCollector::phase4_do_compaction() {
 }
 
 void G1FullCollector::restore_marks() {
-  SharedRestorePreservedMarksTaskExecutor task_executor(_heap->workers());
-  _preserved_marks_set.restore(&task_executor);
+  _preserved_marks_set.restore(_heap->workers());
   _preserved_marks_set.reclaim();
 }
 
@@ -283,13 +285,13 @@ void G1FullCollector::verify_after_marking() {
   // Note: we can verify only the heap here. When an object is
   // marked, the previous value of the mark word (including
   // identity hash values, ages, etc) is preserved, and the mark
-  // word is set to markOop::marked_value - effectively removing
+  // word is set to markWord::marked_value - effectively removing
   // any hash values from the mark word. These hash values are
   // used when verifying the dictionaries and so removing them
   // from the mark word can make verification of the dictionaries
   // fail. At the end of the GC, the original mark word values
   // (including hash values) are restored to the appropriate
   // objects.
-  GCTraceTime(Info, gc, verify)("Verifying During GC (full)");
+  GCTraceTime(Info, gc, verify) tm("Verifying During GC (full)");
   _heap->verify(VerifyOption_G1UseFullMarking);
 }

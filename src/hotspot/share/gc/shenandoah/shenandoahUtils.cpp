@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2017, 2019, Red Hat, Inc. All rights reserved.
+ * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
@@ -34,6 +35,7 @@
 #include "gc/shenandoah/shenandoahHeap.hpp"
 #include "gc/shenandoah/shenandoahHeuristics.hpp"
 #include "gc/shenandoah/shenandoahUtils.hpp"
+#include "utilities/debug.hpp"
 
 ShenandoahPhaseTimings::Phase ShenandoahGCPhase::_current_phase = ShenandoahGCPhase::_invalid_phase;
 
@@ -100,9 +102,10 @@ ShenandoahGCPauseMark::~ShenandoahGCPauseMark() {
 
 ShenandoahGCPhase::ShenandoahGCPhase(const ShenandoahPhaseTimings::Phase phase) :
   _heap(ShenandoahHeap::heap()), _phase(phase) {
-  assert(Thread::current()->is_VM_thread() ||
-         Thread::current()->is_ConcurrentGC_thread(),
-        "Must be set by these threads");
+   assert(!Thread::current()->is_Worker_thread() &&
+              (Thread::current()->is_VM_thread() ||
+               Thread::current()->is_ConcurrentGC_thread()),
+          "Must be set by these threads");
   _parent_phase = _current_phase;
   _current_phase = phase;
 

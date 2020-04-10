@@ -34,8 +34,6 @@ package gc.stress;
  * @run main/othervm gc.stress.TestReclaimStringsLeaksMemory
  * @run main/othervm gc.stress.TestReclaimStringsLeaksMemory -XX:+UseSerialGC
  * @run main/othervm gc.stress.TestReclaimStringsLeaksMemory -XX:+UseParallelGC
- * @run main/othervm gc.stress.TestReclaimStringsLeaksMemory -XX:+UseParallelGC -XX:-UseParallelOldGC
- * @run main/othervm gc.stress.TestReclaimStringsLeaksMemory -XX:+UseConcMarkSweepGC
  * @run main/othervm gc.stress.TestReclaimStringsLeaksMemory -XX:+UseG1GC
  */
 
@@ -57,7 +55,7 @@ public class TestReclaimStringsLeaksMemory {
     public static void main(String[] args) throws Exception {
         ArrayList<String> baseargs = new ArrayList<>(Arrays.asList("-Xms256M",
                                                                    "-Xmx256M",
-                                                                   "-Xlog:gc*",
+                                                                   "-Xlog:gc*,stringtable*=debug:gc.log",
                                                                    "-XX:NativeMemoryTracking=summary",
                                                                    "-XX:+UnlockDiagnosticVMOptions",
                                                                    "-XX:+PrintNMTStatistics" ));
@@ -95,9 +93,19 @@ public class TestReclaimStringsLeaksMemory {
                     lastString = (BaseName + i).intern();
                 }
                 if (++iterations % 5 == 0) {
-                   System.gc();
+                    System.gc();
                 }
             }
+            // Do one last GC and sleep to give ServiceThread a chance to run.
+            System.out.println("One last gc");
+            System.gc();
+            for (int i = 0; i < 100; i++) {
+                try {
+                    Thread.sleep(10);
+                } catch (InterruptedException ex) {
+                }
+            }
+            System.out.println("End of test");
         }
     }
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998, 2019, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 1998, 2020, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -25,6 +25,8 @@
 
 package jdk.javadoc.internal.doclets.formats.html;
 
+import jdk.javadoc.internal.doclets.formats.html.markup.BodyContents;
+import jdk.javadoc.internal.doclets.formats.html.markup.ContentBuilder;
 import jdk.javadoc.internal.doclets.formats.html.markup.HtmlStyle;
 import jdk.javadoc.internal.doclets.formats.html.markup.HtmlTag;
 import jdk.javadoc.internal.doclets.formats.html.markup.HtmlTree;
@@ -45,14 +47,16 @@ import jdk.javadoc.internal.doclets.toolkit.util.DocPaths;
  *  If you write code that depends on this, you do so at your own risk.
  *  This code and its internal interfaces are subject to change or
  *  deletion without notice.</b>
- *
- * @author Atul M Dambalkar
  */
 public class HelpWriter extends HtmlDocletWriter {
 
-    HtmlTree mainTree = HtmlTree.MAIN();
-
     private final Navigation navBar;
+
+    private final String[][] SEARCH_EXAMPLES = {
+            {"j.l.obj", "\"java.lang.Object\""},
+            {"InpStr", "\"java.io.InputStream\""},
+            {"HM.cK", "\"java.util.HashMap.containsKey(Object)\""}
+    };
 
     /**
      * Constructor to construct HelpWriter object.
@@ -62,7 +66,7 @@ public class HelpWriter extends HtmlDocletWriter {
     public HelpWriter(HtmlConfiguration configuration,
                       DocPath filename) {
         super(configuration, filename);
-        this.navBar = new Navigation(null, configuration, fixedNavDiv, PageMode.HELP, path);
+        this.navBar = new Navigation(null, configuration, PageMode.HELP, path);
     }
 
     /**
@@ -87,18 +91,22 @@ public class HelpWriter extends HtmlDocletWriter {
      */
     protected void generateHelpFile() throws DocFileIOException {
         String title = resources.getText("doclet.Window_Help_title");
-        HtmlTree body = getBody(true, getWindowTitle(title));
-        HtmlTree htmlTree = HtmlTree.HEADER();
-        addTop(htmlTree);
+        HtmlTree body = getBody(getWindowTitle(title));
+        Content headerContent = new ContentBuilder();
+        addTop(headerContent);
         navBar.setUserHeader(getUserHeaderFooter(true));
-        htmlTree.add(navBar.getContent(true));
-        body.add(htmlTree);
-        addHelpFileContents(body);
-        htmlTree = HtmlTree.FOOTER();
+        headerContent.add(navBar.getContent(true));
+        ContentBuilder helpFileContent = new ContentBuilder();
+        addHelpFileContents(helpFileContent);
+        HtmlTree footer = HtmlTree.FOOTER();
         navBar.setUserFooter(getUserHeaderFooter(false));
-        htmlTree.add(navBar.getContent(false));
-        addBottom(htmlTree);
-        body.add(htmlTree);
+        footer.add(navBar.getContent(false));
+        addBottom(footer);
+        body.add(new BodyContents()
+                .setHeader(headerContent)
+                .addMainContent(helpFileContent)
+                .setFooter(footer)
+                .toContent());
         printHtmlDocument(null, "help", body);
     }
 
@@ -118,22 +126,21 @@ public class HelpWriter extends HtmlDocletWriter {
         Content intro = HtmlTree.DIV(HtmlStyle.subTitle,
                 contents.getContent("doclet.help.intro"));
         div.add(intro);
-        mainTree.add(div);
+        contentTree.add(div);
         HtmlTree htmlTree;
         HtmlTree ul = new HtmlTree(HtmlTag.UL);
         ul.setStyle(HtmlStyle.blockList);
 
         // Overview
-        if (configuration.createoverview) {
+        if (options.createOverview()) {
             Content overviewHeading = HtmlTree.HEADING(Headings.CONTENT_HEADING,
                 contents.overviewLabel);
-            htmlTree = HtmlTree.SECTION(overviewHeading);
+            htmlTree = HtmlTree.SECTION(HtmlStyle.helpSection, overviewHeading);
             String overviewKey = configuration.showModules
                     ? "doclet.help.overview.modules.body"
                     : "doclet.help.overview.packages.body";
             Content overviewLink = links.createLink(
-                    DocPaths.overviewSummary(configuration.frames),
-                    resources.getText("doclet.Overview"));
+                    DocPaths.INDEX, resources.getText("doclet.Overview"));
             Content overviewBody = contents.getContent(overviewKey, overviewLink);
             Content overviewPara = HtmlTree.P(overviewBody);
             htmlTree.add(overviewPara);
@@ -144,7 +151,7 @@ public class HelpWriter extends HtmlDocletWriter {
         if (configuration.showModules) {
             Content moduleHead = HtmlTree.HEADING(Headings.CONTENT_HEADING,
                     contents.moduleLabel);
-            htmlTree = HtmlTree.SECTION(moduleHead);
+            htmlTree = HtmlTree.SECTION(HtmlStyle.helpSection, moduleHead);
             Content moduleIntro = contents.getContent("doclet.help.module.intro");
             Content modulePara = HtmlTree.P(moduleIntro);
             htmlTree.add(modulePara);
@@ -159,7 +166,7 @@ public class HelpWriter extends HtmlDocletWriter {
         // Package
         Content packageHead = HtmlTree.HEADING(Headings.CONTENT_HEADING,
                 contents.packageLabel);
-        htmlTree = HtmlTree.SECTION(packageHead);
+        htmlTree = HtmlTree.SECTION(HtmlStyle.helpSection, packageHead);
         Content packageIntro = contents.getContent("doclet.help.package.intro");
         Content packagePara = HtmlTree.P(packageIntro);
         htmlTree.add(packagePara);
@@ -176,7 +183,7 @@ public class HelpWriter extends HtmlDocletWriter {
         // Class/interface
         Content classHead = HtmlTree.HEADING(Headings.CONTENT_HEADING,
                 contents.getContent("doclet.help.class_interface.head"));
-        htmlTree = HtmlTree.SECTION(classHead);
+        htmlTree = HtmlTree.SECTION(HtmlStyle.helpSection, classHead);
         Content classIntro = contents.getContent("doclet.help.class_interface.intro");
         Content classPara = HtmlTree.P(classIntro);
         htmlTree.add(classPara);
@@ -211,7 +218,7 @@ public class HelpWriter extends HtmlDocletWriter {
         // Annotation Types
         Content aHead = HtmlTree.HEADING(Headings.CONTENT_HEADING,
                 contents.annotationType);
-        htmlTree = HtmlTree.SECTION(aHead);
+        htmlTree = HtmlTree.SECTION(HtmlStyle.helpSection, aHead);
         Content aIntro = contents.getContent("doclet.help.annotation_type.intro");
         Content aPara = HtmlTree.P(aIntro);
         htmlTree.add(aPara);
@@ -226,7 +233,7 @@ public class HelpWriter extends HtmlDocletWriter {
 
         // Enums
         Content enumHead = HtmlTree.HEADING(Headings.CONTENT_HEADING, contents.enum_);
-        htmlTree = HtmlTree.SECTION(enumHead);
+        htmlTree = HtmlTree.SECTION(HtmlStyle.helpSection, enumHead);
         Content eIntro = contents.getContent("doclet.help.enum.intro");
         Content enumPara = HtmlTree.P(eIntro);
         htmlTree.add(enumPara);
@@ -239,10 +246,10 @@ public class HelpWriter extends HtmlDocletWriter {
         ul.add(HtmlTree.LI(HtmlStyle.blockList, htmlTree));
 
         // Class Use
-        if (configuration.classuse) {
+        if (options.classUse()) {
             Content useHead = HtmlTree.HEADING(Headings.CONTENT_HEADING,
                     contents.getContent("doclet.help.use.head"));
-            htmlTree = HtmlTree.SECTION(useHead);
+            htmlTree = HtmlTree.SECTION(HtmlStyle.helpSection, useHead);
             Content useBody = contents.getContent("doclet.help.use.body");
             Content usePara = HtmlTree.P(useBody);
             htmlTree.add(usePara);
@@ -250,10 +257,10 @@ public class HelpWriter extends HtmlDocletWriter {
         }
 
         // Tree
-        if (configuration.createtree) {
+        if (options.createTree()) {
             Content treeHead = HtmlTree.HEADING(Headings.CONTENT_HEADING,
                     contents.getContent("doclet.help.tree.head"));
-            htmlTree = HtmlTree.SECTION(treeHead);
+            htmlTree = HtmlTree.SECTION(HtmlStyle.helpSection, treeHead);
             Content treeIntro = contents.getContent("doclet.help.tree.intro",
                     links.createLink(DocPaths.OVERVIEW_TREE,
                     resources.getText("doclet.Class_Hierarchy")),
@@ -268,10 +275,10 @@ public class HelpWriter extends HtmlDocletWriter {
         }
 
         // Deprecated
-        if (!(configuration.nodeprecatedlist || configuration.nodeprecated)) {
+        if (!(options.noDeprecatedList() || options.noDeprecated())) {
             Content dHead = HtmlTree.HEADING(Headings.CONTENT_HEADING,
                     contents.deprecatedAPI);
-            htmlTree = HtmlTree.SECTION(dHead);
+            htmlTree = HtmlTree.SECTION(HtmlStyle.helpSection, dHead);
             Content deprBody = contents.getContent("doclet.help.deprecated.body",
                     links.createLink(DocPaths.DEPRECATED_LIST,
                     resources.getText("doclet.Deprecated_API")));
@@ -281,9 +288,9 @@ public class HelpWriter extends HtmlDocletWriter {
         }
 
         // Index
-        if (configuration.createindex) {
+        if (options.createIndex()) {
             Content indexlink;
-            if (configuration.splitindex) {
+            if (options.splitIndex()) {
                 indexlink = links.createLink(DocPaths.INDEX_FILES.resolve(DocPaths.indexN(1)),
                         resources.getText("doclet.Index"));
             } else {
@@ -292,29 +299,17 @@ public class HelpWriter extends HtmlDocletWriter {
             }
             Content indexHead = HtmlTree.HEADING(Headings.CONTENT_HEADING,
                     contents.getContent("doclet.help.index.head"));
-            htmlTree = HtmlTree.SECTION(indexHead);
+            htmlTree = HtmlTree.SECTION(HtmlStyle.helpSection, indexHead);
             Content indexBody = contents.getContent("doclet.help.index.body", indexlink);
             Content indexPara = HtmlTree.P(indexBody);
             htmlTree.add(indexPara);
             ul.add(HtmlTree.LI(HtmlStyle.blockList, htmlTree));
         }
 
-        // Frames
-        if (configuration.frames) {
-            Content frameHead = HtmlTree.HEADING(Headings.CONTENT_HEADING,
-                    contents.getContent("doclet.help.frames.head"));
-            htmlTree = HtmlTree.SECTION(frameHead);
-            Content framesBody = contents.getContent("doclet.help.frames.body");
-            Content framePara = HtmlTree.P(framesBody);
-            htmlTree.add(framePara);
-
-            ul.add(HtmlTree.LI(HtmlStyle.blockList, htmlTree));
-        }
-
         // Serialized Form
         Content sHead = HtmlTree.HEADING(Headings.CONTENT_HEADING,
                 contents.serializedForm);
-        htmlTree = HtmlTree.SECTION(sHead);
+        htmlTree = HtmlTree.SECTION(HtmlStyle.helpSection, sHead);
         Content serialBody = contents.getContent("doclet.help.serial_form.body");
         Content serialPara = HtmlTree.P(serialBody);
         htmlTree.add(serialPara);
@@ -323,7 +318,7 @@ public class HelpWriter extends HtmlDocletWriter {
         // Constant Field Values
         Content constHead = HtmlTree.HEADING(Headings.CONTENT_HEADING,
                 contents.constantsSummaryTitle);
-        htmlTree = HtmlTree.SECTION(constHead);
+        htmlTree = HtmlTree.SECTION(HtmlStyle.helpSection, constHead);
         Content constantsBody = contents.getContent("doclet.help.constants.body",
                 links.createLink(DocPaths.CONSTANT_VALUES,
                 resources.getText("doclet.Constants_Summary")));
@@ -334,10 +329,21 @@ public class HelpWriter extends HtmlDocletWriter {
         // Search
         Content searchHead = HtmlTree.HEADING(Headings.CONTENT_HEADING,
                 contents.getContent("doclet.help.search.head"));
-        htmlTree = HtmlTree.SECTION(searchHead);
-        Content searchBody = contents.getContent("doclet.help.search.body");
-        Content searchPara = HtmlTree.P(searchBody);
-        htmlTree.add(searchPara);
+        htmlTree = HtmlTree.SECTION(HtmlStyle.helpSection, searchHead);
+        Content searchIntro = HtmlTree.P(contents.getContent("doclet.help.search.intro"));
+        Content searchExamples = new HtmlTree(HtmlTag.UL);
+        for (String[] example : SEARCH_EXAMPLES) {
+            searchExamples.add(HtmlTree.LI(
+                    contents.getContent("doclet.help.search.example",
+                            HtmlTree.CODE(new StringContent(example[0])), example[1])));
+        }
+        Content searchSpecLink = HtmlTree.A(
+                resources.getText("doclet.help.search.spec.url", Runtime.version().feature()),
+                contents.getContent("doclet.help.search.spec.title"));
+        Content searchRefer = HtmlTree.P(contents.getContent("doclet.help.search.refer", searchSpecLink));
+        htmlTree.add(searchIntro);
+        htmlTree.add(searchExamples);
+        htmlTree.add(searchRefer);
         ul.add(HtmlTree.LI(HtmlStyle.blockList, htmlTree));
 
         Content divContent = HtmlTree.DIV(HtmlStyle.contentContainer, ul);
@@ -345,7 +351,6 @@ public class HelpWriter extends HtmlDocletWriter {
         Content footnote = HtmlTree.SPAN(HtmlStyle.emphasizedPhrase,
                 contents.getContent("doclet.help.footnote"));
         divContent.add(footnote);
-        mainTree.add(divContent);
-        contentTree.add(mainTree);
+        contentTree.add(divContent);
     }
 }

@@ -26,7 +26,6 @@
  * @bug      4460354 8014636 8043186 8195805 8182765 8196202
  * @summary  Test to make sure that relative paths are redirected in the
  *           output so that they are not broken.
- * @author   jamieh
  * @library  ../../lib
  * @modules jdk.javadoc/jdk.javadoc.internal.tool
  * @build    javadoc.tester.*
@@ -50,7 +49,6 @@ public class TestRelativeLinks extends JavadocTester {
     public void test() {
         javadoc("-d", "out",
                 "-use",
-                "--frames",
                 "-sourcepath", testSrc,
                 "pkg", "pkg2");
         checkExit(Exit.ERROR);
@@ -98,7 +96,7 @@ public class TestRelativeLinks extends JavadocTester {
             " <a href=\"../../pkg/relative-multi-line-link.html\">relative-multi-line-link</a>.");
 
         // PACKAGE OVERVIEW
-        checkOutput("overview-summary.html", true,
+        checkOutput("index.html", true,
             "<a href=\"./pkg/relative-package-link.html\">relative package link</a>");
     }
 

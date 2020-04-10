@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013, 2019, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2013, 2020, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -29,6 +29,7 @@
 #include "ci/ciSymbol.hpp"
 #include "ci/ciKlass.hpp"
 #include "ci/ciUtilities.inline.hpp"
+#include "classfile/symbolTable.hpp"
 #include "compiler/compileBroker.hpp"
 #include "memory/allocation.inline.hpp"
 #include "memory/oopFactory.hpp"
@@ -40,6 +41,7 @@
 #include "runtime/handles.inline.hpp"
 #include "utilities/copy.hpp"
 #include "utilities/macros.hpp"
+#include "utilities/utf8.hpp"
 
 #ifndef PRODUCT
 
@@ -334,7 +336,7 @@ class CompileReplay : public StackObj {
   Symbol* parse_symbol(TRAPS) {
     const char* str = parse_escaped_string();
     if (str != NULL) {
-      Symbol* sym = SymbolTable::lookup(str, (int)strlen(str), CHECK_NULL);
+      Symbol* sym = SymbolTable::new_symbol(str);
       return sym;
     }
     return NULL;
@@ -343,7 +345,7 @@ class CompileReplay : public StackObj {
   // Parse a valid klass name and look it up
   Klass* parse_klass(TRAPS) {
     const char* str = parse_escaped_string();
-    Symbol* klass_name = SymbolTable::lookup(str, (int)strlen(str), CHECK_NULL);
+    Symbol* klass_name = SymbolTable::new_symbol(str);
     if (klass_name != NULL) {
       Klass* k = NULL;
       if (_iklass != NULL) {
@@ -369,7 +371,7 @@ class CompileReplay : public StackObj {
 
   // Lookup a klass
   Klass* resolve_klass(const char* klass, TRAPS) {
-    Symbol* klass_name = SymbolTable::lookup(klass, (int)strlen(klass), CHECK_NULL);
+    Symbol* klass_name = SymbolTable::new_symbol(klass);
     return SystemDictionary::resolve_or_fail(klass_name, _loader, _protection_domain, true, THREAD);
   }
 
@@ -530,7 +532,11 @@ class CompileReplay : public StackObj {
     // old version w/o comp_level
     if (had_error() && (error_message() == comp_level_label)) {
       // use highest available tier
-      comp_level = TieredCompilation ? TieredStopAtLevel : CompLevel_highest_tier;
+      if (TieredCompilation) {
+        comp_level = TieredStopAtLevel;
+      } else {
+        comp_level = CompLevel_highest_tier;
+      }
     }
     if (!is_valid_comp_level(comp_level)) {
       return;
@@ -591,7 +597,7 @@ class CompileReplay : public StackObj {
       nm->make_not_entrant();
     }
     replay_state = this;
-    CompileBroker::compile_method(method, entry_bci, comp_level,
+    CompileBroker::compile_method(methodHandle(THREAD, method), entry_bci, comp_level,
                                   methodHandle(), 0, CompileTask::Reason_Replay, THREAD);
     replay_state = NULL;
     reset();
@@ -625,10 +631,10 @@ class CompileReplay : public StackObj {
     {
       // Grab a lock here to prevent multiple
       // MethodData*s from being created.
-      MutexLocker ml(MethodData_lock, THREAD);
+      MutexLocker ml(THREAD, MethodData_lock);
       if (method->method_data() == NULL) {
         ClassLoaderData* loader_data = method->method_holder()->class_loader_data();
-        MethodData* method_data = MethodData::allocate(loader_data, method, CHECK);
+        MethodData* method_data = MethodData::allocate(loader_data, methodHandle(THREAD, method), CHECK);
         method->set_method_data(method_data);
       }
     }
@@ -798,8 +804,8 @@ class CompileReplay : public StackObj {
     const char* field_name = parse_escaped_string();
     const char* field_signature = parse_string();
     fieldDescriptor fd;
-    Symbol* name = SymbolTable::lookup(field_name, (int)strlen(field_name), CHECK);
-    Symbol* sig = SymbolTable::lookup(field_signature, (int)strlen(field_signature), CHECK);
+    Symbol* name = SymbolTable::new_symbol(field_name);
+    Symbol* sig = SymbolTable::new_symbol(field_signature);
     if (!k->find_local_field(name, sig, &fd) ||
         !fd.is_static() ||
         fd.has_initial_value()) {
@@ -808,18 +814,18 @@ class CompileReplay : public StackObj {
     }
 
     oop java_mirror = k->java_mirror();
-    if (field_signature[0] == '[') {
+    if (field_signature[0] == JVM_SIGNATURE_ARRAY) {
       int length = parse_int("array length");
       oop value = NULL;
 
-      if (field_signature[1] == '[') {
+      if (field_signature[1] == JVM_SIGNATURE_ARRAY) {
         // multi dimensional array
         ArrayKlass* kelem = (ArrayKlass *)parse_klass(CHECK);
         if (kelem == NULL) {
           return;
         }
         int rank = 0;
-        while (field_signature[rank] == '[') {
+        while (field_signature[rank] == JVM_SIGNATURE_ARRAY) {
           rank++;
         }
         jint* dims = NEW_RESOURCE_ARRAY(jint, rank);
@@ -845,7 +851,8 @@ class CompileReplay : public StackObj {
           value = oopFactory::new_intArray(length, CHECK);
         } else if (strcmp(field_signature, "[J") == 0) {
           value = oopFactory::new_longArray(length, CHECK);
-        } else if (field_signature[0] == '[' && field_signature[1] == 'L') {
+        } else if (field_signature[0] == JVM_SIGNATURE_ARRAY &&
+                   field_signature[1] == JVM_SIGNATURE_CLASS) {
           Klass* kelem = resolve_klass(field_signature + 1, CHECK);
           value = oopFactory::new_objArray(kelem, length, CHECK);
         } else {
@@ -886,7 +893,7 @@ class CompileReplay : public StackObj {
       } else if (strcmp(field_signature, "Ljava/lang/String;") == 0) {
         Handle value = java_lang_String::create_from_str(string_value, CHECK);
         java_mirror->obj_field_put(fd.offset(), value());
-      } else if (field_signature[0] == 'L') {
+      } else if (field_signature[0] == JVM_SIGNATURE_CLASS) {
         Klass* k = resolve_klass(string_value, CHECK);
         oop value = InstanceKlass::cast(k)->allocate_instance(CHECK);
         java_mirror->obj_field_put(fd.offset(), value);

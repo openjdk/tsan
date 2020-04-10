@@ -23,10 +23,9 @@
 
 /*
  * @test
- * @bug      4973609 8015249 8025633 8026567 6469561 8071982 8162363 8182765
+ * @bug      4973609 8015249 8025633 8026567 6469561 8071982 8162363 8182765 8223364
  * @summary  Make sure that annotation types with 0 members does not have
  *           extra HR tags.
- * @author   jamieh
  * @library  ../../lib
  * @modules jdk.javadoc/jdk.javadoc.internal.tool
  * @build    javadoc.tester.*
@@ -61,9 +60,11 @@ public class TestAnnotationTypes extends JavadocTester {
                 "<th class=\"colSecond\" scope=\"row\"><code><span class=\"memberNameLink\"><a href=\"#DEFAULT_NAME\">DEFAULT_NAME</a></span>"
                 + "</code></th>",
                 "<!-- ============ ANNOTATION TYPE FIELD DETAIL =========== -->",
-                "<h3>DEFAULT_NAME</h3>\n"
-                + "<pre>static final&nbsp;java."
-                + "lang.String&nbsp;DEFAULT_NAME</pre>");
+                "<section class=\"detail\" id=\"DEFAULT_NAME\">\n"
+                + "<h3>DEFAULT_NAME</h3>\n"
+                + "<div class=\"memberSignature\"><span class=\"modifiers\">static final</span>&nbsp;"
+                + "<span class=\"returnType\">java.lang.String</span>&nbsp;"
+                + "<span class=\"memberName\">DEFAULT_NAME</span></div>\n");
 
         checkOutput("pkg/AnnotationType.html", true,
                 "<li>Summary:&nbsp;</li>\n"
@@ -74,17 +75,17 @@ public class TestAnnotationTypes extends JavadocTester {
         checkOutput("pkg/AnnotationType.html", true,
                     "<!-- ============ ANNOTATION TYPE MEMBER DETAIL =========== -->",
                     "<ul class=\"blockList\">",
-                    "<li class=\"blockList\"><a id=\"annotation.type.element.detail\">",
-                    "<!--   -->",
-                    "</a>",
-                    "<h2>Element Detail</h2>",
-                    "<a id=\"value()\">",
-                    "<!--   -->",
-                    "</a>",
-                    "<ul class=\"blockListLast\">",
                     "<li class=\"blockList\">",
-                    "<h3>value</h3>",
-                    "<pre>int&nbsp;value</pre>" );
+                    "<section class=\"details\" id=\"annotation.type.element.detail\">",
+                    "<h2>Element Details</h2>",
+                    "<!--   -->",
+                    "</a>",
+                    "<ul class=\"blockList\">",
+                    "<li class=\"blockList\">",
+                    "<section class=\"detail\" id=\"value()\">",
+                    "<h3>value</h3>\n",
+                    "<div class=\"memberSignature\"><span class=\"returnType\">int</span>"
+                    + "&nbsp;<span class=\"memberName\">value</span></div>");
 
         checkOutput("pkg/AnnotationType.html", false,
                 "<HR>\n\n"
@@ -110,7 +111,7 @@ public class TestAnnotationTypes extends JavadocTester {
                 "@Documented public @interface AnnotationTypeField {");
 
         checkOutput("pkg/AnnotationType.html", true,
-                "public @interface <a href=\"../src-html/pkg/AnnotationType.html#line.34"
+                "public @interface <a href=\"../src-html/pkg/AnnotationType.html#line.31"
                 + "\">AnnotationType</a></pre>");
 
         checkOutput("pkg/AnnotationTypeField.html", true,

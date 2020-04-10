@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2003, 2019, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2003, 2020, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -31,6 +31,7 @@
 #include "classfile/vmSymbols.hpp"
 #include "interpreter/bytecodeStream.hpp"
 #include "interpreter/interpreter.hpp"
+#include "jfr/jfrEvents.hpp"
 #include "jvmtifiles/jvmtiEnv.hpp"
 #include "logging/log.hpp"
 #include "logging/logConfiguration.hpp"
@@ -77,6 +78,7 @@
 #endif  // INCLUDE_TSAN
 #include "utilities/exceptions.hpp"
 #include "utilities/preserveException.hpp"
+#include "utilities/utf8.hpp"
 
 
 #define FIXLATER 0 // REMOVE this when completed.
@@ -448,9 +450,16 @@ JvmtiEnv::RetransformClasses(jint class_count, const jclass* classes) {
     }
     class_definitions[index].klass              = jcls;
   }
+  EventRetransformClasses event;
   VM_RedefineClasses op(class_count, class_definitions, jvmti_class_load_kind_retransform);
   VMThread::execute(&op);
-  return (op.check_error());
+  jvmtiError error = op.check_error();
+  if (error == JVMTI_ERROR_NONE) {
+    event.set_classCount(class_count);
+    event.set_redefinitionId(op.id());
+    event.commit();
+  }
+  return error;
 } /* end RetransformClasses */
 
 
@@ -459,9 +468,16 @@ JvmtiEnv::RetransformClasses(jint class_count, const jclass* classes) {
 jvmtiError
 JvmtiEnv::RedefineClasses(jint class_count, const jvmtiClassDefinition* class_definitions) {
 //TODO: add locking
+  EventRedefineClasses event;
   VM_RedefineClasses op(class_count, class_definitions, jvmti_class_load_kind_redefine);
   VMThread::execute(&op);
-  return (op.check_error());
+  jvmtiError error = op.check_error();
+  if (error == JVMTI_ERROR_NONE) {
+    event.set_classCount(class_count);
+    event.set_redefinitionId(op.id());
+    event.commit();
+  }
+  return error;
 } /* end RedefineClasses */
 
 
@@ -811,14 +827,11 @@ JvmtiEnv::SetVerboseFlag(jvmtiVerboseFlag flag, jboolean value) {
     LogConfiguration::configure_stdout(level, false, LOG_TAGS(class, load));
     break;
   case JVMTI_VERBOSE_GC:
-    if (value == 0) {
-      LogConfiguration::configure_stdout(LogLevel::Off, true, LOG_TAGS(gc));
-    } else {
-      LogConfiguration::configure_stdout(LogLevel::Info, true, LOG_TAGS(gc));
-    }
+    LogConfiguration::configure_stdout(level, true, LOG_TAGS(gc));
     break;
   case JVMTI_VERBOSE_JNI:
-    PrintJNIResolving = value != 0;
+    level = value == 0 ? LogLevel::Off : LogLevel::Debug;
+    LogConfiguration::configure_stdout(level, true, LOG_TAGS(jni, resolve));
     break;
   default:
     return JVMTI_ERROR_ILLEGAL_ARGUMENT;
@@ -881,8 +894,7 @@ JvmtiEnv::GetThreadState(jthread thread, jint* thread_state_ptr) {
     if (jts == _thread_in_native) {
       state |= JVMTI_THREAD_STATE_IN_NATIVE;
     }
-    OSThread* osThread = java_thread->osthread();
-    if (osThread != NULL && osThread->interrupted()) {
+    if (java_thread->is_interrupted(false)) {
       state |= JVMTI_THREAD_STATE_INTERRUPTED;
     }
   }
@@ -945,7 +957,7 @@ JvmtiEnv::SuspendThread(JavaThread* java_thread) {
   }
 
   {
-    MutexLockerEx ml(java_thread->SR_lock(), Mutex::_no_safepoint_check_flag);
+    MutexLocker ml(java_thread->SR_lock(), Mutex::_no_safepoint_check_flag);
     if (java_thread->is_external_suspend()) {
       // don't allow nested external suspend requests.
       return (JVMTI_ERROR_THREAD_SUSPENDED);
@@ -985,7 +997,7 @@ JvmtiEnv::SuspendThreadList(jint request_count, const jthread* request_list, jvm
     }
 
     {
-      MutexLockerEx ml(java_thread->SR_lock(), Mutex::_no_safepoint_check_flag);
+      MutexLocker ml(java_thread->SR_lock(), Mutex::_no_safepoint_check_flag);
       if (java_thread->is_external_suspend()) {
         // don't allow nested external suspend requests.
         results[i] = JVMTI_ERROR_THREAD_SUSPENDED;
@@ -1094,7 +1106,6 @@ JvmtiEnv::StopThread(JavaThread* java_thread, jobject exception) {
 // thread - NOT pre-checked
 jvmtiError
 JvmtiEnv::InterruptThread(jthread thread) {
-  // TODO: this is very similar to JVM_Interrupt(); share code in future
   JavaThread* current_thread  = JavaThread::current();
   JavaThread* java_thread = NULL;
   ThreadsListHandle tlh(current_thread);
@@ -1102,8 +1113,12 @@ JvmtiEnv::InterruptThread(jthread thread) {
   if (err != JVMTI_ERROR_NONE) {
     return err;
   }
-
-  Thread::interrupt(java_thread);
+  // Really this should be a Java call to Thread.interrupt to ensure the same
+  // semantics, however historically this has not been done for some reason.
+  // So we continue with that (which means we don't interact with any Java-level
+  // Interruptible object) but we must set the Java-level interrupted state.
+  java_lang_Thread::set_interrupted(JNIHandles::resolve(thread), true);
+  java_thread->interrupt();
 
   return JVMTI_ERROR_NONE;
 } /* end InterruptThread */
@@ -1333,7 +1348,7 @@ JvmtiEnv::RunAgentThread(jthread thread, jvmtiStartFunction proc, const void* ar
 
   Handle thread_hndl(current_thread, thread_oop);
   {
-    MutexLocker mu(Threads_lock); // grab Threads_lock
+    MutexLocker mu(current_thread, Threads_lock); // grab Threads_lock
 
     JvmtiAgentThread *new_thread = new JvmtiAgentThread(this, proc, arg);
 
@@ -3155,7 +3170,7 @@ JvmtiEnv::GetBytecodes(Method* method_oop, jint* bytecode_count_ptr, unsigned ch
   NULL_CHECK(method_oop, JVMTI_ERROR_INVALID_METHODID);
 
   HandleMark hm;
-  methodHandle method(method_oop);
+  methodHandle method(Thread::current(), method_oop);
   jint size = (jint)method->code_size();
   jvmtiError err = allocate(size, bytecodes_ptr);
   if (err != JVMTI_ERROR_NONE) {
@@ -3237,24 +3252,24 @@ JvmtiEnv::CreateRawMonitor(const char* name, jrawMonitorID* monitor_ptr) {
 jvmtiError
 JvmtiEnv::DestroyRawMonitor(JvmtiRawMonitor * rmonitor) {
   if (Threads::number_of_threads() == 0) {
-    // Remove this  monitor from pending raw monitors list
+    // Remove this monitor from pending raw monitors list
     // if it has entered in onload or start phase.
     JvmtiPendingMonitors::destroy(rmonitor);
   } else {
     Thread* thread  = Thread::current();
-    if (rmonitor->is_entered(thread)) {
+    if (rmonitor->owner() == thread) {
       // The caller owns this monitor which we are about to destroy.
       // We exit the underlying synchronization object so that the
       // "delete monitor" call below can work without an assertion
       // failure on systems that don't like destroying synchronization
       // objects that are locked.
       int r;
-      intptr_t recursion = rmonitor->recursions();
-      for (intptr_t i = 0; i <= recursion; i++) {
+      int recursion = rmonitor->recursions();
+      for (int i = 0; i <= recursion; i++) {
         TSAN_RUNTIME_ONLY(TSAN_RAW_LOCK_RELEASED(rmonitor));
         r = rmonitor->raw_exit(thread);
-        assert(r == ObjectMonitor::OM_OK, "raw_exit should have worked");
-        if (r != ObjectMonitor::OM_OK) {  // robustness
+        assert(r == JvmtiRawMonitor::M_OK, "raw_exit should have worked");
+        if (r != JvmtiRawMonitor::M_OK) {  // robustness
           return JVMTI_ERROR_INTERNAL;
         }
       }
@@ -3281,7 +3296,7 @@ JvmtiEnv::DestroyRawMonitor(JvmtiRawMonitor * rmonitor) {
 jvmtiError
 JvmtiEnv::RawMonitorEnter(JvmtiRawMonitor * rmonitor) {
   if (Threads::number_of_threads() == 0) {
-    // No JavaThreads exist so ObjectMonitor enter cannot be
+    // No JavaThreads exist so JvmtiRawMonitor enter cannot be
     // used, add this raw monitor to the pending list.
     // The pending monitors will be actually entered when
     // the VM is setup.
@@ -3289,20 +3304,10 @@ JvmtiEnv::RawMonitorEnter(JvmtiRawMonitor * rmonitor) {
     // in thread.cpp.
     JvmtiPendingMonitors::enter(rmonitor);
   } else {
-    int r = 0;
     Thread* thread = Thread::current();
-
     if (thread->is_Java_thread()) {
       JavaThread* current_thread = (JavaThread*)thread;
 
-#ifdef PROPER_TRANSITIONS
-      // Not really unknown but ThreadInVMfromNative does more than we want
-      ThreadInVMfromUnknown __tiv;
-      {
-        ThreadBlockInVM __tbivm(current_thread);
-        r = rmonitor->raw_enter(current_thread);
-      }
-#else
       /* Transition to thread_blocked without entering vm state          */
       /* This is really evil. Normally you can't undo _thread_blocked    */
       /* transitions like this because it would cause us to miss a       */
@@ -3318,22 +3323,11 @@ JvmtiEnv::RawMonitorEnter(JvmtiRawMonitor * rmonitor) {
              current_thread->frame_anchor()->walkable(), "Must be walkable");
       current_thread->set_thread_state(_thread_blocked);
 
-      r = rmonitor->raw_enter(current_thread);
+      rmonitor->raw_enter(current_thread);
       // restore state, still at a safepoint safe state
       current_thread->set_thread_state(state);
-
-#endif /* PROPER_TRANSITIONS */
-      assert(r == ObjectMonitor::OM_OK, "raw_enter should have worked");
     } else {
-      if (thread->is_Named_thread()) {
-        r = rmonitor->raw_enter(thread);
-      } else {
-        ShouldNotReachHere();
-      }
-    }
-
-    if (r != ObjectMonitor::OM_OK) {  // robustness
-      return JVMTI_ERROR_INTERNAL;
+      rmonitor->raw_enter(thread);
     }
     TSAN_RUNTIME_ONLY(TSAN_RAW_LOCK_ACQUIRED(rmonitor));
   }
@@ -3353,33 +3347,11 @@ JvmtiEnv::RawMonitorExit(JvmtiRawMonitor * rmonitor) {
       err = JVMTI_ERROR_NOT_MONITOR_OWNER;
     }
   } else {
-    int r = 0;
     Thread* thread = Thread::current();
-
     TSAN_RUNTIME_ONLY(TSAN_RAW_LOCK_RELEASED(rmonitor));
-
-    if (thread->is_Java_thread()) {
-      JavaThread* current_thread = (JavaThread*)thread;
-#ifdef PROPER_TRANSITIONS
-      // Not really unknown but ThreadInVMfromNative does more than we want
-      ThreadInVMfromUnknown __tiv;
-#endif /* PROPER_TRANSITIONS */
-      r = rmonitor->raw_exit(current_thread);
-    } else {
-      if (thread->is_Named_thread()) {
-        r = rmonitor->raw_exit(thread);
-      } else {
-        ShouldNotReachHere();
-      }
-    }
-
-    if (r == ObjectMonitor::OM_ILLEGAL_MONITOR_STATE) {
+    int r = rmonitor->raw_exit(thread);
+    if (r == JvmtiRawMonitor::M_ILLEGAL_MONITOR_STATE) {
       err = JVMTI_ERROR_NOT_MONITOR_OWNER;
-    } else {
-      assert(r == ObjectMonitor::OM_OK, "raw_exit should have worked");
-      if (r != ObjectMonitor::OM_OK) {  // robustness
-        err = JVMTI_ERROR_INTERNAL;
-      }
     }
   }
   return err;
@@ -3389,97 +3361,35 @@ JvmtiEnv::RawMonitorExit(JvmtiRawMonitor * rmonitor) {
 // rmonitor - pre-checked for validity
 jvmtiError
 JvmtiEnv::RawMonitorWait(JvmtiRawMonitor * rmonitor, jlong millis) {
-  int r = 0;
   Thread* thread = Thread::current();
 
   // A wait is modeled in Tsan as a simple release-acquire pair.
   // The matching release annotation is below.
   TSAN_RUNTIME_ONLY(TSAN_RAW_LOCK_RELEASED(rmonitor));
-
-  if (thread->is_Java_thread()) {
-    JavaThread* current_thread = (JavaThread*)thread;
-#ifdef PROPER_TRANSITIONS
-    // Not really unknown but ThreadInVMfromNative does more than we want
-    ThreadInVMfromUnknown __tiv;
-    {
-      ThreadBlockInVM __tbivm(current_thread);
-      r = rmonitor->raw_wait(millis, true, current_thread);
-    }
-#else
-    /* Transition to thread_blocked without entering vm state          */
-    /* This is really evil. Normally you can't undo _thread_blocked    */
-    /* transitions like this because it would cause us to miss a       */
-    /* safepoint but since the thread was already in _thread_in_native */
-    /* the thread is not leaving a safepoint safe state and it will    */
-    /* block when it tries to return from native. We can't safepoint   */
-    /* block in here because we could deadlock the vmthread. Blech.    */
-
-    JavaThreadState state = current_thread->thread_state();
-    assert(state == _thread_in_native, "Must be _thread_in_native");
-    // frame should already be walkable since we are in native
-    assert(!current_thread->has_last_Java_frame() ||
-           current_thread->frame_anchor()->walkable(), "Must be walkable");
-    current_thread->set_thread_state(_thread_blocked);
-
-    r = rmonitor->raw_wait(millis, true, current_thread);
-    // restore state, still at a safepoint safe state
-    current_thread->set_thread_state(state);
-
-#endif /* PROPER_TRANSITIONS */
-  } else {
-    if (thread->is_Named_thread()) {
-      r = rmonitor->raw_wait(millis, true, thread);
-    } else {
-      ShouldNotReachHere();
-    }
-  }
-
-  // A wait is modeled in Tsan as a simple release-acquire pair.
+  int r = rmonitor->raw_wait(millis, thread);
   // The matching acquire annotation is above.
   TSAN_RUNTIME_ONLY(TSAN_RAW_LOCK_ACQUIRED(rmonitor));
 
   switch (r) {
-  case ObjectMonitor::OM_INTERRUPTED:
+  case JvmtiRawMonitor::M_INTERRUPTED:
     return JVMTI_ERROR_INTERRUPT;
-  case ObjectMonitor::OM_ILLEGAL_MONITOR_STATE:
+  case JvmtiRawMonitor::M_ILLEGAL_MONITOR_STATE:
     return JVMTI_ERROR_NOT_MONITOR_OWNER;
+  default:
+    return JVMTI_ERROR_NONE;
   }
-  assert(r == ObjectMonitor::OM_OK, "raw_wait should have worked");
-  if (r != ObjectMonitor::OM_OK) {  // robustness
-    return JVMTI_ERROR_INTERNAL;
-  }
-
-  return JVMTI_ERROR_NONE;
 } /* end RawMonitorWait */
 
 
 // rmonitor - pre-checked for validity
 jvmtiError
 JvmtiEnv::RawMonitorNotify(JvmtiRawMonitor * rmonitor) {
-  int r = 0;
   Thread* thread = Thread::current();
+  int r = rmonitor->raw_notify(thread);
 
-  if (thread->is_Java_thread()) {
-    JavaThread* current_thread = (JavaThread*)thread;
-    // Not really unknown but ThreadInVMfromNative does more than we want
-    ThreadInVMfromUnknown __tiv;
-    r = rmonitor->raw_notify(current_thread);
-  } else {
-    if (thread->is_Named_thread()) {
-      r = rmonitor->raw_notify(thread);
-    } else {
-      ShouldNotReachHere();
-    }
-  }
-
-  if (r == ObjectMonitor::OM_ILLEGAL_MONITOR_STATE) {
+  if (r == JvmtiRawMonitor::M_ILLEGAL_MONITOR_STATE) {
     return JVMTI_ERROR_NOT_MONITOR_OWNER;
   }
-  assert(r == ObjectMonitor::OM_OK, "raw_notify should have worked");
-  if (r != ObjectMonitor::OM_OK) {  // robustness
-    return JVMTI_ERROR_INTERNAL;
-  }
-
   return JVMTI_ERROR_NONE;
 } /* end RawMonitorNotify */
 
@@ -3487,29 +3397,12 @@ JvmtiEnv::RawMonitorNotify(JvmtiRawMonitor * rmonitor) {
 // rmonitor - pre-checked for validity
 jvmtiError
 JvmtiEnv::RawMonitorNotifyAll(JvmtiRawMonitor * rmonitor) {
-  int r = 0;
   Thread* thread = Thread::current();
+  int r = rmonitor->raw_notifyAll(thread);
 
-  if (thread->is_Java_thread()) {
-    JavaThread* current_thread = (JavaThread*)thread;
-    ThreadInVMfromUnknown __tiv;
-    r = rmonitor->raw_notifyAll(current_thread);
-  } else {
-    if (thread->is_Named_thread()) {
-      r = rmonitor->raw_notifyAll(thread);
-    } else {
-      ShouldNotReachHere();
-    }
-  }
-
-  if (r == ObjectMonitor::OM_ILLEGAL_MONITOR_STATE) {
+  if (r == JvmtiRawMonitor::M_ILLEGAL_MONITOR_STATE) {
     return JVMTI_ERROR_NOT_MONITOR_OWNER;
   }
-  assert(r == ObjectMonitor::OM_OK, "raw_notifyAll should have worked");
-  if (r != ObjectMonitor::OM_OK) {  // robustness
-    return JVMTI_ERROR_INTERNAL;
-  }
-
   return JVMTI_ERROR_NONE;
 } /* end RawMonitorNotifyAll */
 

@@ -27,6 +27,7 @@
 
 #include "gc/g1/g1DirtyCardQueue.hpp"
 #include "gc/g1/g1SATBMarkQueueSet.hpp"
+#include "gc/g1/g1SharedDirtyCardQueue.hpp"
 #include "gc/shared/cardTable.hpp"
 #include "gc/shared/cardTableBarrierSet.hpp"
 
@@ -42,6 +43,7 @@ class G1BarrierSet: public CardTableBarrierSet {
   BufferNode::Allocator _dirty_card_queue_buffer_allocator;
   G1SATBMarkQueueSet _satb_mark_queue_set;
   G1DirtyCardQueueSet _dirty_card_queue_set;
+  G1SharedDirtyCardQueue _shared_dirty_card_queue;
 
   static G1BarrierSet* g1_barrier_set() {
     return barrier_set_cast<G1BarrierSet>(BarrierSet::barrier_set());
@@ -80,15 +82,16 @@ class G1BarrierSet: public CardTableBarrierSet {
   virtual void on_thread_attach(Thread* thread);
   virtual void on_thread_detach(Thread* thread);
 
-  BufferNode::Allocator& satb_mark_queue_buffer_allocator();
-  BufferNode::Allocator& dirty_card_queue_buffer_allocator();
-
   static G1SATBMarkQueueSet& satb_mark_queue_set() {
     return g1_barrier_set()->_satb_mark_queue_set;
   }
 
   static G1DirtyCardQueueSet& dirty_card_queue_set() {
     return g1_barrier_set()->_dirty_card_queue_set;
+  }
+
+  static G1SharedDirtyCardQueue& shared_dirty_card_queue() {
+    return g1_barrier_set()->_shared_dirty_card_queue;
   }
 
   // Callbacks for runtime accesses.

@@ -27,7 +27,6 @@
  * @summary  Test the case where the overriden method returns a different
  *           type than the method in the child class.  Make sure the
  *           documentation is inherited but the return type isn't.
- * @author   jamieh
  * @library  ../../lib
  * @modules jdk.javadoc/jdk.javadoc.internal.tool
  * @build    javadoc.tester.*
@@ -57,8 +56,9 @@ public class TestMemberSummary extends JavadocTester {
                 + "<th class=\"colSecond\" scope=\"row\"><code><span class=\"memberNameLink\"><a href=\"#returnTypeTest()\">"
                 + "returnTypeTest</a></span>()</code>",
                 // Check return type in member detail.
-                "<pre class=\"methodSignature\">public&nbsp;<a href=\"PublicChild.html\" title=\"class in pkg\">"
-                + "PublicChild</a>&nbsp;returnTypeTest()</pre>",
+                "<div class=\"memberSignature\"><span class=\"modifiers\">public</span>&nbsp;"
+                + "<span class=\"returnType\"><a href=\"PublicChild.html\" title=\"class in pkg\">"
+                + "PublicChild</a></span>&nbsp;<span class=\"memberName\">returnTypeTest</span>()</div>",
                 "<th class=\"colConstructorName\" scope=\"row\"><code><span class=\"memberNameLink\">"
                 + "<a href=\"#%3Cinit%3E()\">PublicChild</a></span>()</code></th>");
 
@@ -70,10 +70,7 @@ public class TestMemberSummary extends JavadocTester {
 
         // Legacy anchor dimensions (6290760)
         checkOutput("pkg2/A.html", true,
-                "<a id=\"f(java.lang.Object[])\">\n"
-                + "<!--   -->\n"
-                + "</a><a id=\"f(T[])\">\n"
-                + "<!--   -->\n"
-                + "</a>");
+                "<section class=\"detail\" id=\"f(T[])\">\n"
+                + "<h3 id=\"f(java.lang.Object[])\">f</h3>\n");
     }
 }

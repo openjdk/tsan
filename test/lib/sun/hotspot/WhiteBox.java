@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012, 2019, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2012, 2020, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -99,10 +99,15 @@ public class WhiteBox {
 
   // Runtime
   // Make sure class name is in the correct format
-  public boolean isClassAlive(String name) {
-    return isClassAlive0(name.replace('.', '/'));
+  public int countAliveClasses(String name) {
+    return countAliveClasses0(name.replace('.', '/'));
   }
-  private native boolean isClassAlive0(String name);
+  private native int countAliveClasses0(String name);
+
+  public boolean isClassAlive(String name) {
+    return countAliveClasses(name) != 0;
+  }
+
   public  native int getSymbolRefcount(String name);
 
   private native boolean isMonitorInflated0(Object obj);
@@ -193,6 +198,9 @@ public class WhiteBox {
     return parseCommandLine0(commandline, delim, args);
   }
 
+  public native int g1ActiveMemoryNodeCount();
+  public native int[] g1MemoryNodeIds();
+
   // Parallel GC
   public native long psVirtualSpaceAlignment();
   public native long psHeapGenerationAlignment();
@@ -219,8 +227,13 @@ public class WhiteBox {
   public native long NMTMallocWithPseudoStackAndType(long size, int index, int type);
   public native boolean NMTChangeTrackingLevel();
   public native int NMTGetHashSize();
+  public native long NMTNewArena(long initSize);
+  public native void NMTFreeArena(long arena);
+  public native void NMTArenaMalloc(long arena, long size);
 
   // Compiler
+  public native boolean isC2OrJVMCIIncludedInVmBuild();
+
   public native int     matchesMethod(Executable method, String pattern);
   public native int     matchesInline(Executable method, String pattern);
   public native boolean shouldPrintAssembly(Executable method, int comp_level);
@@ -330,6 +343,7 @@ public class WhiteBox {
     return enqueueInitializerForCompilation0(aClass, compLevel);
   }
   private native void    clearMethodState0(Executable method);
+  public  native void    markMethodProfiled(Executable method);
   public         void    clearMethodState(Executable method) {
     Objects.requireNonNull(method);
     clearMethodState0(method);
@@ -383,7 +397,6 @@ public class WhiteBox {
   public native void freeMetaspace(ClassLoader classLoader, long addr, long size);
   public native long incMetaspaceCapacityUntilGC(long increment);
   public native long metaspaceCapacityUntilGC();
-  public native boolean metaspaceShouldConcurrentCollect();
   public native long metaspaceReserveAlignment();
 
   // Don't use these methods directly
@@ -510,9 +523,11 @@ public class WhiteBox {
 
   // Safepoint Checking
   public native void assertMatchingSafepointCalls(boolean mutexSafepointValue, boolean attemptedNoSafepointValue);
+  public native void assertSpecialLock(boolean allowVMBlock, boolean safepointCheck);
 
   // Sharing & archiving
   public native String  getDefaultArchivePath();
+  public native boolean cdsMemoryMappingFailed();
   public native boolean isSharingEnabled();
   public native boolean isShared(Object o);
   public native boolean isSharedClass(Class<?> c);
@@ -521,6 +536,7 @@ public class WhiteBox {
   public native boolean isJFRIncludedInVmBuild();
   public native boolean isJavaHeapArchiveSupported();
   public native Object  getResolvedReferences(Class<?> c);
+  public native void    linkClass(Class<?> c);
   public native boolean areOpenArchiveHeapObjectsMapped();
 
   // Compiler Directive
@@ -541,11 +557,13 @@ public class WhiteBox {
   public native void disableElfSectionCache();
 
   // Resolved Method Table
-  public native int resolvedMethodRemovedCount();
+  public native long resolvedMethodItemsCount();
 
   // Protection Domain Table
   public native int protectionDomainRemovedCount();
 
   // Number of loaded AOT libraries
   public native int aotLibrariesCount();
+
+  public native int getKlassMetadataSize(Class<?> c);
 }

@@ -26,7 +26,6 @@
  * @bug 4720957 5020118 8026567 8038976 8184969 8164407 8182765 8205593
  * @summary Test to make sure that -link and -linkoffline link to
  * right files, and URLs with and without trailing slash are accepted.
- * @author jamieh
  * @library ../../lib
  * @modules jdk.javadoc/jdk.javadoc.internal.tool
  * @build javadoc.tester.*
@@ -74,13 +73,13 @@ public class TestLinkOption extends JavadocTester {
         checkOutput("pkg/C.html", true,
                 "<a href=\"" + url + "java/lang/String.html?is-external=true\" "
                 + "title=\"class or interface in java.lang\" class=\"externalLink\"><code>Link to String Class</code></a>",
-                //Make sure the parameters are indented properly when the -link option is used.
+                //Make sure the parameters are formatted properly when the -link option is used.
                 "(int&nbsp;p1,\n"
-                + "      int&nbsp;p2,\n"
-                + "      int&nbsp;p3)",
+                + "int&nbsp;p2,\n"
+                + "int&nbsp;p3)",
                 "(int&nbsp;p1,\n"
-                + "      int&nbsp;p2,\n"
-                + "      <a href=\"" + url + "java/lang/Object.html?is-external=true\" title=\"class or interface in java.lang\" class=\"externalLink\">"
+                + "int&nbsp;p2,\n"
+                + "<a href=\"" + url + "java/lang/Object.html?is-external=true\" title=\"class or interface in java.lang\" class=\"externalLink\">"
                 + "Object</a>&nbsp;p3)");
 
         checkOutput("pkg/B.html", true,

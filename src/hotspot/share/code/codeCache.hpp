@@ -147,7 +147,7 @@ class CodeCache : AllStatic {
   static void blobs_do(void f(CodeBlob* cb));              // iterates over all CodeBlobs
   static void blobs_do(CodeBlobClosure* f);                // iterates over all CodeBlobs
   static void nmethods_do(void f(nmethod* nm));            // iterates over all nmethods
-  static void metadata_do(void f(Metadata* m));            // iterates over metadata in alive nmethods
+  static void metadata_do(MetadataClosure* f);             // iterates over metadata in alive nmethods
 
   // Lookup
   static CodeBlob* find_blob(void* start);              // Returns the CodeBlob containing the given address
@@ -170,6 +170,7 @@ class CodeCache : AllStatic {
   // "unloading_occurred" controls whether metadata should be cleaned because of class unloading.
   class UnloadingScope: StackObj {
     ClosureIsUnloadingBehaviour _is_unloading_behaviour;
+    IsUnloadingBehaviour*       _saved_behaviour;
 
   public:
     UnloadingScope(BoolObjectClosure* is_alive);
@@ -270,10 +271,16 @@ class CodeCache : AllStatic {
 
   // Flushing and deoptimization
   static void flush_dependents_on(InstanceKlass* dependee);
+
+  // RedefineClasses support
   // Flushing and deoptimization in case of evolution
   static void mark_for_evol_deoptimization(InstanceKlass* dependee);
   static int  mark_dependents_for_evol_deoptimization();
+  static void mark_all_nmethods_for_evol_deoptimization();
   static void flush_evol_dependents();
+  static void old_nmethods_do(MetadataClosure* f);
+  static void unregister_old_nmethod(CompiledMethod* c);
+
   // Support for fullspeed debugging
   static void flush_dependents_on_method(const methodHandle& dependee);
 
@@ -287,7 +294,7 @@ class CodeCache : AllStatic {
 
   // CodeHeap State Analytics.
   // interface methods for CodeHeap printing, called by CompileBroker
-  static void aggregate(outputStream *out, const char* granularity);
+  static void aggregate(outputStream *out, size_t granularity);
   static void discard(outputStream *out);
   static void print_usedSpace(outputStream *out);
   static void print_freeSpace(outputStream *out);

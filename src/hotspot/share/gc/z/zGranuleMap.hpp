@@ -35,17 +35,18 @@ class ZGranuleMap {
   friend class ZGranuleMapIterator<T>;
 
 private:
-  T* const _map;
+  const size_t _size;
+  T* const     _map;
 
-  size_t index_for_addr(uintptr_t addr) const;
-  size_t size() const;
+  size_t index_for_offset(uintptr_t offset) const;
 
 public:
-  ZGranuleMap();
+  ZGranuleMap(size_t max_offset);
   ~ZGranuleMap();
 
-  T get(uintptr_t addr) const;
-  void put(uintptr_t addr, T value);
+  T get(uintptr_t offset) const;
+  void put(uintptr_t offset, T value);
+  void put(uintptr_t offset, size_t size, T value);
 };
 
 template <typename T>
@@ -58,6 +59,7 @@ public:
   ZGranuleMapIterator(const ZGranuleMap<T>* map);
 
   bool next(T* value);
+  bool next(T** value);
 };
 
 #endif // SHARE_GC_Z_ZGRANULEMAP_HPP

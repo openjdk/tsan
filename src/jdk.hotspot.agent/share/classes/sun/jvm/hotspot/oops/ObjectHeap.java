@@ -32,7 +32,6 @@ package sun.jvm.hotspot.oops;
 import java.util.*;
 
 import sun.jvm.hotspot.debugger.*;
-import sun.jvm.hotspot.gc.cms.*;
 import sun.jvm.hotspot.gc.shared.*;
 import sun.jvm.hotspot.gc.epsilon.*;
 import sun.jvm.hotspot.gc.g1.*;
@@ -234,16 +233,11 @@ public class ObjectHeap {
     }
     visitor.prologue(totalSize);
 
-    CompactibleFreeListSpace cmsSpaceOld = null;
     CollectedHeap heap = VM.getVM().getUniverse().heap();
 
     if (heap instanceof GenCollectedHeap) {
       GenCollectedHeap genHeap = (GenCollectedHeap) heap;
       Generation genOld = genHeap.getGen(1);
-      if (genOld instanceof ConcurrentMarkSweepGeneration) {
-          ConcurrentMarkSweepGeneration concGen = (ConcurrentMarkSweepGeneration)genOld;
-          cmsSpaceOld = concGen.cmsSpace();
-      }
     }
 
     for (int i = 0; i < liveRegions.size(); i += 2) {
@@ -255,7 +249,7 @@ public class ObjectHeap {
         OopHandle handle = bottom.addOffsetToAsOopHandle(0);
 
         while (handle.lessThan(top)) {
-        Oop obj = null;
+          Oop obj = null;
 
           try {
             obj = newOop(handle);
@@ -265,20 +259,7 @@ public class ObjectHeap {
             }
           }
           if (obj == null) {
-             //Find the object size using Printezis bits and skip over
-             long size = 0;
-
-             if ( (cmsSpaceOld != null) && cmsSpaceOld.contains(handle) ){
-                 size = cmsSpaceOld.collector().blockSizeUsingPrintezisBits(handle);
-             }
-
-             if (size <= 0) {
-                //Either Printezis bits not set or handle is not in cms space.
-                throw new UnknownOopException();
-             }
-
-             handle = handle.addOffsetToAsOopHandle(CompactibleFreeListSpace.adjustObjectSizeInBytes(size));
-             continue;
+              throw new UnknownOopException();
           }
           if (of == null || of.canInclude(obj)) {
                   if (visitor.doObj(obj)) {
@@ -286,11 +267,8 @@ public class ObjectHeap {
                           break;
                   }
           }
-          if ( (cmsSpaceOld != null) && cmsSpaceOld.contains(handle)) {
-              handle = handle.addOffsetToAsOopHandle(CompactibleFreeListSpace.adjustObjectSizeInBytes(obj.getObjectSize()) );
-          } else {
-              handle = handle.addOffsetToAsOopHandle(obj.getObjectSize());
-          }
+
+          handle = handle.addOffsetToAsOopHandle(obj.getObjectSize());
         }
       }
       catch (AddressException e) {
@@ -355,7 +333,9 @@ public class ObjectHeap {
     // end.
 
     if (VM.getVM().getUseTLAB()) {
-      for (JavaThread thread = VM.getVM().getThreads().first(); thread != null; thread = thread.next()) {
+      Threads threads = VM.getVM().getThreads();
+      for (int i = 0; i < threads.getNumberOfThreads(); i++) {
+        JavaThread thread = threads.getJavaThreadAt(i);
         ThreadLocalAllocBuffer tlab = thread.tlab();
         if (tlab.start() != null) {
           if ((tlab.top() == null) || (tlab.end() == null)) {

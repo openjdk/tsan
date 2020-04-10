@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2005, 2019, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2005, 2020, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -27,6 +27,7 @@
 #include "classfile/systemDictionary.hpp"
 #include "gc/shared/gcVMOperations.hpp"
 #include "memory/resourceArea.hpp"
+#include "memory/universe.hpp"
 #include "oops/oop.inline.hpp"
 #include "oops/typeArrayOop.inline.hpp"
 #include "prims/jvmtiExport.hpp"
@@ -44,7 +45,7 @@
 #include "utilities/debug.hpp"
 #include "utilities/formatBuffer.hpp"
 
-volatile bool AttachListener::_initialized;
+volatile AttachListenerState AttachListener::_state = AL_NOT_INITIALIZED;
 
 // Implementation of "properties" command.
 //
@@ -236,19 +237,7 @@ jint dump_heap(AttachOperation* op, outputStream* out) {
     // This helps reduces the amount of unreachable objects in the dump
     // and makes it easier to browse.
     HeapDumper dumper(live_objects_only /* request GC */);
-    int res = dumper.dump(op->arg(0));
-    if (res == 0) {
-      out->print_cr("Heap dump file created");
-    } else {
-      // heap dump failed
-      ResourceMark rm;
-      char* error = dumper.error_as_C_string();
-      if (error == NULL) {
-        out->print_cr("Dump failed - reason unknown");
-      } else {
-        out->print_cr("%s", error);
-      }
-    }
+    dumper.dump(op->arg(0), out);
   }
   return JNI_OK;
 }
@@ -330,7 +319,7 @@ static jint print_flag(AttachOperation* op, outputStream* out) {
     out->print_cr("flag name is missing");
     return JNI_ERR;
   }
-  JVMFlag* f = JVMFlag::find_flag((char*)name, strlen(name));
+  JVMFlag* f = JVMFlag::find_flag(name);
   if (f) {
     f->print_as_flag(out);
     out->cr();
@@ -371,6 +360,7 @@ static void attach_listener_thread_entry(JavaThread* thread, TRAPS) {
          "Should already be setup");
 
   if (AttachListener::pd_init() != 0) {
+    AttachListener::set_state(AL_NOT_INITIALIZED);
     return;
   }
   AttachListener::set_initialized();
@@ -378,6 +368,7 @@ static void attach_listener_thread_entry(JavaThread* thread, TRAPS) {
   for (;;) {
     AttachOperation* op = AttachListener::dequeue();
     if (op == NULL) {
+      AttachListener::set_state(AL_NOT_INITIALIZED);
       return;   // dequeue failed or shutdown
     }
 
@@ -421,6 +412,8 @@ static void attach_listener_thread_entry(JavaThread* thread, TRAPS) {
     // operation complete - send result and output to client
     op->complete(res, &st);
   }
+
+  ShouldNotReachHere();
 }
 
 bool AttachListener::has_init_error(TRAPS) {
@@ -444,6 +437,7 @@ void AttachListener::init() {
   const char thread_name[] = "Attach Listener";
   Handle string = java_lang_String::create_from_str(thread_name, THREAD);
   if (has_init_error(THREAD)) {
+    set_state(AL_NOT_INITIALIZED);
     return;
   }
 
@@ -455,6 +449,7 @@ void AttachListener::init() {
                        string,
                        THREAD);
   if (has_init_error(THREAD)) {
+    set_state(AL_NOT_INITIALIZED);
     return;
   }
 
@@ -468,10 +463,11 @@ void AttachListener::init() {
                         thread_oop,
                         THREAD);
   if (has_init_error(THREAD)) {
+    set_state(AL_NOT_INITIALIZED);
     return;
   }
 
-  { MutexLocker mu(Threads_lock);
+  { MutexLocker mu(THREAD, Threads_lock);
     JavaThread* listener_thread = new JavaThread(&attach_listener_thread_entry);
 
     // Check that thread and osthread were created

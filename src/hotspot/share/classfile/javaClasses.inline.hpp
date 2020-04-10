@@ -45,14 +45,14 @@ void java_lang_String::set_value(oop string, typeArrayOop buffer) {
   string->obj_field_put(value_offset, (oop)buffer);
 }
 
-void java_lang_String::set_hash(oop string, unsigned int hash) {
-  assert(initialized && (hash_offset > 0), "Must be initialized");
-  string->int_field_put(hash_offset, hash);
+bool java_lang_String::hash_is_set(oop java_string) {
+  assert(initialized && (hash_offset > 0) && (hashIsZero_offset > 0), "Must be initialized");
+  return java_string->int_field(hash_offset) != 0 || java_string->bool_field(hashIsZero_offset) != 0;
 }
 
 // Accessors
 bool java_lang_String::value_equals(typeArrayOop str_value1, typeArrayOop str_value2) {
-  return (oopDesc::equals(str_value1, str_value2) ||
+  return ((str_value1 == str_value2) ||
           (str_value1->length() == str_value2->length() &&
            (!memcmp(str_value1->base(T_BYTE),
                     str_value2->base(T_BYTE),
@@ -69,12 +69,6 @@ typeArrayOop java_lang_String::value_no_keepalive(oop java_string) {
   assert(initialized && (value_offset > 0), "Must be initialized");
   assert(is_instance(java_string), "must be java_string");
   return (typeArrayOop) java_string->obj_field_access<AS_NO_KEEPALIVE>(value_offset);
-}
-
-unsigned int java_lang_String::hash(oop java_string) {
-  assert(initialized && (hash_offset > 0), "Must be initialized");
-  assert(is_instance(java_string), "must be java_string");
-  return java_string->int_field(hash_offset);
 }
 
 bool java_lang_String::is_latin1(oop java_string) {
@@ -185,6 +179,14 @@ inline bool java_lang_invoke_CallSite::is_instance(oop obj) {
   return obj != NULL && is_subclass(obj->klass());
 }
 
+inline jboolean java_lang_invoke_ConstantCallSite::is_frozen(oop site) {
+  return site->bool_field(_is_frozen_offset);
+}
+
+inline bool java_lang_invoke_ConstantCallSite::is_instance(oop obj) {
+  return obj != NULL && is_subclass(obj->klass());
+}
+
 inline bool java_lang_invoke_MethodHandleNatives_CallSiteContext::is_instance(oop obj) {
   return obj != NULL && is_subclass(obj->klass());
 }
@@ -270,7 +272,7 @@ inline int Backtrace::cpref_at(unsigned int merged) {
   return extract_low_short_from_int(merged);
 }
 
-inline int Backtrace::get_line_number(const methodHandle& method, int bci) {
+inline int Backtrace::get_line_number(Method* method, int bci) {
   int line_number = 0;
   if (method->is_native()) {
     // Negative value different from -1 below, enabling Java code in
@@ -280,9 +282,6 @@ inline int Backtrace::get_line_number(const methodHandle& method, int bci) {
   } else {
     // Returns -1 if no LineNumberTable, and otherwise actual line number
     line_number = method->line_number_from_bci(bci);
-    if (line_number == -1 && ShowHiddenFrames) {
-      line_number = bci + 1000000;
-    }
   }
   return line_number;
 }

@@ -86,7 +86,6 @@ JNIEXPORT void TsanSymbolize(julong loc,
                              AddFrameFunc add_frame,
                              void *ctx) {
   DEBUG_ONLY(NoSafepointVerifier nsv;)
-  DEBUG_ONLY(NoAllocVerifier nav;)
   assert(ThreadSanitizer, "Need -XX:+ThreadSanitizer");
 
   assert((loc & SharedRuntime::tsan_fake_pc_bit) != 0,

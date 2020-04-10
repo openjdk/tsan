@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2005, 2019, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2005, 2020, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -36,12 +36,14 @@
 #include "ci/ciUtilities.hpp"
 #include "gc/shared/barrierSet.hpp"
 #include "gc/shared/c1/barrierSetC1.hpp"
+#include "oops/klass.inline.hpp"
 #include "runtime/arguments.hpp"
 #include "runtime/sharedRuntime.hpp"
 #include "runtime/stubRoutines.hpp"
 #include "runtime/vm_version.hpp"
 #include "utilities/bitMap.inline.hpp"
 #include "utilities/macros.hpp"
+#include "utilities/powerOfTwo.hpp"
 
 #ifdef ASSERT
 #define __ gen()->lir(__FILE__, __LINE__)->
@@ -898,13 +900,19 @@ void LIRGenerator::arraycopy_helper(Intrinsic* x, int* flagsp, ciArrayKlass** ex
 LIR_Opr LIRGenerator::round_item(LIR_Opr opr) {
   assert(opr->is_register(), "why spill if item is not register?");
 
-  if (RoundFPResults && UseSSE < 1 && opr->is_single_fpu()) {
-    LIR_Opr result = new_register(T_FLOAT);
-    set_vreg_flag(result, must_start_in_memory);
-    assert(opr->is_register(), "only a register can be spilled");
-    assert(opr->value_type()->is_float(), "rounding only for floats available");
-    __ roundfp(opr, LIR_OprFact::illegalOpr, result);
-    return result;
+  if (strict_fp_requires_explicit_rounding) {
+#ifdef IA32
+    if (UseSSE < 1 && opr->is_single_fpu()) {
+      LIR_Opr result = new_register(T_FLOAT);
+      set_vreg_flag(result, must_start_in_memory);
+      assert(opr->is_register(), "only a register can be spilled");
+      assert(opr->value_type()->is_float(), "rounding only for floats available");
+      __ roundfp(opr, LIR_OprFact::illegalOpr, result);
+      return result;
+    }
+#else
+    Unimplemented();
+#endif // IA32
   }
   return opr;
 }
@@ -1300,7 +1308,7 @@ void LIRGenerator::do_isPrimitive(Intrinsic* x) {
   }
 
   __ move(new LIR_Address(rcvr.result(), java_lang_Class::klass_offset_in_bytes(), T_ADDRESS), temp, info);
-  __ cmp(lir_cond_notEqual, temp, LIR_OprFact::intConst(0));
+  __ cmp(lir_cond_notEqual, temp, LIR_OprFact::metadataConst(0));
   __ cmove(lir_cond_notEqual, LIR_OprFact::intConst(0), LIR_OprFact::intConst(1), result, T_BOOLEAN);
 }
 
@@ -1546,7 +1554,7 @@ void LIRGenerator::do_StoreIndexed(StoreIndexed* x) {
   assert(x->is_pinned(),"");
   bool needs_range_check = x->compute_needs_range_check();
   bool use_length = x->length() != NULL;
-  bool obj_store = x->elt_type() == T_ARRAY || x->elt_type() == T_OBJECT;
+  bool obj_store = is_reference_type(x->elt_type());
   bool needs_store_check = obj_store && (x->value()->as_Constant() == NULL ||
                                          !get_jobject_constant(x->value())->is_null_object() ||
                                          x->should_profile());
@@ -1950,6 +1958,8 @@ void LIRGenerator::do_Throw(Throw* x) {
 
 
 void LIRGenerator::do_RoundFP(RoundFP* x) {
+  assert(strict_fp_requires_explicit_rounding, "not required");
+
   LIRItem input(x->input(), this);
   input.load_item();
   LIR_Opr input_opr = input.result();
@@ -2163,7 +2173,7 @@ void LIRGenerator::do_UnsafeGetObject(UnsafeGetObject* x) {
   if (type == T_BOOLEAN) {
     decorators |= C1_MASK_BOOLEAN;
   }
-  if (type == T_ARRAY || type == T_OBJECT) {
+  if (is_reference_type(type)) {
     decorators |= ON_UNKNOWN_OOP_REF;
   }
 
@@ -2190,7 +2200,7 @@ void LIRGenerator::do_UnsafePutObject(UnsafePutObject* x) {
   set_no_result(x);
 
   DecoratorSet decorators = IN_HEAP | C1_UNSAFE_ACCESS;
-  if (type == T_ARRAY || type == T_OBJECT) {
+  if (is_reference_type(type)) {
     decorators |= ON_UNKNOWN_OOP_REF;
   }
   if (x->is_volatile()) {
@@ -2207,7 +2217,7 @@ void LIRGenerator::do_UnsafeGetAndSetObject(UnsafeGetAndSetObject* x) {
 
   DecoratorSet decorators = IN_HEAP | C1_UNSAFE_ACCESS | MO_SEQ_CST;
 
-  if (type == T_ARRAY || type == T_OBJECT) {
+  if (is_reference_type(type)) {
     decorators |= ON_UNKNOWN_OOP_REF;
   }
 
@@ -2224,7 +2234,7 @@ void LIRGenerator::do_SwitchRanges(SwitchRangeArray* x, LIR_Opr value, BlockBegi
   int lng = x->length();
 
   for (int i = 0; i < lng; i++) {
-    SwitchRange* one_range = x->at(i);
+    C1SwitchRange* one_range = x->at(i);
     int low_key = one_range->low_key();
     int high_key = one_range->high_key();
     BlockBegin* dest = one_range->sux();
@@ -2256,7 +2266,7 @@ SwitchRangeArray* LIRGenerator::create_lookup_ranges(TableSwitch* x) {
     BlockBegin* sux = x->sux_at(0);
     int key = x->lo_key();
     BlockBegin* default_sux = x->default_sux();
-    SwitchRange* range = new SwitchRange(key, sux);
+    C1SwitchRange* range = new C1SwitchRange(key, sux);
     for (int i = 0; i < len; i++, key++) {
       BlockBegin* new_sux = x->sux_at(i);
       if (sux == new_sux) {
@@ -2267,7 +2277,7 @@ SwitchRangeArray* LIRGenerator::create_lookup_ranges(TableSwitch* x) {
         if (sux != default_sux) {
           res->append(range);
         }
-        range = new SwitchRange(key, new_sux);
+        range = new C1SwitchRange(key, new_sux);
       }
       sux = new_sux;
     }
@@ -2285,7 +2295,7 @@ SwitchRangeArray* LIRGenerator::create_lookup_ranges(LookupSwitch* x) {
     BlockBegin* default_sux = x->default_sux();
     int key = x->key_at(0);
     BlockBegin* sux = x->sux_at(0);
-    SwitchRange* range = new SwitchRange(key, sux);
+    C1SwitchRange* range = new C1SwitchRange(key, sux);
     for (int i = 1; i < len; i++) {
       int new_key = x->key_at(i);
       BlockBegin* new_sux = x->sux_at(i);
@@ -2297,7 +2307,7 @@ SwitchRangeArray* LIRGenerator::create_lookup_ranges(LookupSwitch* x) {
         if (range->sux() != default_sux) {
           res->append(range);
         }
-        range = new SwitchRange(new_key, new_sux);
+        range = new C1SwitchRange(new_key, new_sux);
       }
       key = new_key;
       sux = new_sux;
@@ -2600,7 +2610,7 @@ void LIRGenerator::profile_parameters(Base* x) {
         LIR_Opr src = args->at(i);
         assert(!src->is_illegal(), "check");
         BasicType t = src->type();
-        if (t == T_OBJECT || t == T_ARRAY) {
+        if (is_reference_type(t)) {
           intptr_t profiled_k = parameters->type(j);
           Local* local = x->state()->local_at(java_index)->as_Local();
           ciKlass* exact = profile_type(md, md->byte_offset_of_slot(parameters_type_data, ParametersTypeData::type_offset(0)),
@@ -3279,7 +3289,14 @@ void LIRGenerator::do_ProfileInvoke(ProfileInvoke* x) {
 
 void LIRGenerator::increment_backedge_counter_conditionally(LIR_Condition cond, LIR_Opr left, LIR_Opr right, CodeEmitInfo* info, int left_bci, int right_bci, int bci) {
   if (compilation()->count_backedges()) {
+#if defined(X86) && !defined(_LP64)
+    // BEWARE! On 32-bit x86 cmp clobbers its left argument so we need a temp copy.
+    LIR_Opr left_copy = new_register(left->type());
+    __ move(left, left_copy);
+    __ cmp(cond, left_copy, right);
+#else
     __ cmp(cond, left, right);
+#endif
     LIR_Opr step = new_register(T_INT);
     LIR_Opr plus_one = LIR_OprFact::intConst(InvocationCounter::count_increment);
     LIR_Opr zero = LIR_OprFact::intConst(0);

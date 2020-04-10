@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013, 2018, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2013, 2019, Oracle and/or its affiliates. All rights reserved.
  * Copyright (c) 2018, Red Hat Inc. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
@@ -215,7 +215,7 @@ public class AArch64Call {
                  * Offset might not fit into a 28-bit immediate, generate an indirect call with a
                  * 64-bit immediate address which is fixed up by HotSpot.
                  */
-                masm.movNativeAddress(scratch, 0L);
+                masm.movNativeAddress(scratch, 0L, true);
                 masm.blr(scratch);
             }
         } else {

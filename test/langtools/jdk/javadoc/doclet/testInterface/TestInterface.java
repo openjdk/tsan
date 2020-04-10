@@ -29,7 +29,6 @@
  *           documentation for public methods, as recommended by the JLS.
  *           If A implements I and B extends A, B should be in the list of
  *           implementing classes in the documentation for I.
- * @author   jamieh
  * @library  ../../lib
  * @modules jdk.javadoc/jdk.javadoc.internal.tool
  * @build    javadoc.tester.*
@@ -67,8 +66,10 @@ public class TestInterface extends JavadocTester {
         checkExit(Exit.OK);
 
         checkOutput("pkg/Interface.html", true,
-                "<pre class=\"methodSignature\">int&nbsp;method()</pre>",
-                "<pre>static final&nbsp;int field</pre>",
+                "<div class=\"memberSignature\"><span class=\"returnType\">int</span>&nbsp;"
+                + "<span class=\"memberName\">method</span>()</div>",
+                "<div class=\"memberSignature\"><span class=\"modifiers\">static final</span>&nbsp;"
+                + "<span class=\"returnType\">int</span>&nbsp;<span class=\"memberName\">field</span></div>",
                 // Make sure known implementing class list is correct and omits type parameters.
                 "<dl>\n"
                 + "<dt>All Known Implementing Classes:</dt>\n"
@@ -85,20 +86,11 @@ public class TestInterface extends JavadocTester {
                 + "Interface</a>&lt;CE&gt;</code></dd>\n"
                 + "</dl>",
                 //Make sure Class Tree has substituted type parameters.
-                "<ul class=\"inheritance\">\n"
-                + "<li>java.lang.Object</li>\n"
-                + "<li>\n"
-                + "<ul class=\"inheritance\">\n"
-                + "<li><a href=\"Parent.html\" title=\"class in pkg\">"
-                + "pkg.Parent</a>&lt;CE&gt;</li>\n"
-                + "<li>\n"
-                + "<ul class=\"inheritance\">\n"
-                + "<li>pkg.Child&lt;CE&gt;</li>\n"
-                + "</ul>\n"
-                + "</li>\n"
-                + "</ul>\n"
-                + "</li>\n"
-                + "</ul>",
+                "<div class=\"inheritance\" title=\"Inheritance Tree\">java.lang.Object\n"
+                + "<div class=\"inheritance\"><a href=\"Parent.html\""
+                + " title=\"class in pkg\">pkg.Parent</a>&lt;CE&gt;\n"
+                + "<div class=\"inheritance\">pkg.Child&lt;CE&gt;</div>\n"
+                + "</div>\n</div>",
                 //Make sure "Specified By" has substituted type parameters.
                 "<dt><span class=\"overrideSpecifyLabel\">Specified by:</span></dt>\n"
                 + "<dd><code><a href=\"Interface.html#method()\">method</a>"
@@ -131,8 +123,10 @@ public class TestInterface extends JavadocTester {
                 "<dt><span class=\"overrideSpecifyLabel\">Specified by:</span></dt>\n");
 
         checkOutput("pkg/ClassWithStaticMembers.html", true,
-                "<h3>f</h3>\n"
-                + "<pre>public static&nbsp;int f</pre>\n"
+                "<section class=\"detail\" id=\"f\">\n"
+                + "<h3>f</h3>\n"
+                + "<div class=\"memberSignature\"><span class=\"modifiers\">public static</span>&nbsp;"
+                + "<span class=\"returnType\">int</span>&nbsp;<span class=\"memberName\">f</span></div>\n"
                 + "<div class=\"block\">A hider field</div>",
 
                 "<td class=\"colFirst\"><code>static void</code></td>\n"
@@ -142,8 +136,10 @@ public class TestInterface extends JavadocTester {
                 + "<div class=\"block\">A hider method</div>\n"
                 + "</td>\n",
 
-                "<h3>staticMethod</h3>\n"
-                + "<pre class=\"methodSignature\">public static&nbsp;void&nbsp;staticMethod()</pre>\n"
+                "<section class=\"detail\" id=\"staticMethod()\">\n"
+                + "<h3>staticMethod</h3>\n"
+                + "<div class=\"memberSignature\"><span class=\"modifiers\">public static</span>&nbsp;"
+                + "<span class=\"returnType\">void</span>&nbsp;<span class=\"memberName\">staticMethod</span>()</div>\n"
                 + "<div class=\"block\"><span class=\"descfrmTypeLabel\">"
                 + "Description copied from interface:&nbsp;<code>"
                 + "<a href=\"InterfaceWithStaticMembers.html#staticMethod()\">"
@@ -183,7 +179,8 @@ public class TestInterface extends JavadocTester {
 
         checkOutput("pkg2/Spliterator.OfDouble.html", true,
             // Ensure the correct type parameters are displayed correctly
-            "<h2>Nested classes/interfaces inherited from interface&nbsp;pkg2."
+            "<h2 id=\"nested.classes.inherited.from.class.pkg2.Spliterator\">"
+            + "Nested classes/interfaces inherited from interface&nbsp;pkg2."
             + "<a href=\"Spliterator.html\" title=\"interface in pkg2\">Spliterator</a></h2>\n"
             + "<code><a href=\"Spliterator.OfDouble.html\" title=\"interface in pkg2\">"
             + "Spliterator.OfDouble</a>, <a href=\"Spliterator.OfInt.html\" "

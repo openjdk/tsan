@@ -30,6 +30,7 @@
 #include "logging/log.hpp"
 #include "memory/resourceArea.hpp"
 #include "logging/log.hpp"
+#include "runtime/atomic.hpp"
 
 StringDedupCleaningTask::StringDedupCleaningTask(BoolObjectClosure* is_alive,
                                                  OopClosure* keep_alive,
@@ -94,7 +95,7 @@ void CodeCacheUnloadingTask::claim_nmethods(CompiledMethod** claimed_nmethods, i
       }
     }
 
-  } while (Atomic::cmpxchg(last.method(), &_claimed_nmethod, first) != first);
+  } while (Atomic::cmpxchg(&_claimed_nmethod, first, last.method()) != first);
 }
 
 void CodeCacheUnloadingTask::work(uint worker_id) {
@@ -130,7 +131,7 @@ bool KlassCleaningTask::claim_clean_klass_tree_task() {
     return false;
   }
 
-  return Atomic::cmpxchg(1, &_clean_klass_tree_claimed, 0) == 0;
+  return Atomic::cmpxchg(&_clean_klass_tree_claimed, 0, 1) == 0;
 }
 
 InstanceKlass* KlassCleaningTask::claim_next_klass() {
@@ -155,32 +156,5 @@ void KlassCleaningTask::work() {
   InstanceKlass* klass;
   while ((klass = claim_next_klass()) != NULL) {
     clean_klass(klass);
-  }
-}
-
-ParallelCleaningTask::ParallelCleaningTask(BoolObjectClosure* is_alive,
-                                           uint num_workers,
-                                           bool unloading_occurred,
-                                           bool resize_dedup_table) :
-  AbstractGangTask("Parallel Cleaning"),
-  _unloading_occurred(unloading_occurred),
-  _string_dedup_task(is_alive, NULL, resize_dedup_table),
-  _code_cache_task(num_workers, is_alive, unloading_occurred),
-  _klass_cleaning_task() {
-}
-
-// The parallel work done by all worker threads.
-void ParallelCleaningTask::work(uint worker_id) {
-  // Do first pass of code cache cleaning.
-  _code_cache_task.work(worker_id);
-
-  // Clean the string dedup data structures.
-  _string_dedup_task.work(worker_id);
-
-  // Clean all klasses that were not unloaded.
-  // The weak metadata in klass doesn't need to be
-  // processed if there was no unloading.
-  if (_unloading_occurred) {
-    _klass_cleaning_task.work();
   }
 }

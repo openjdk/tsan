@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998, 2018, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 1998, 2019, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -197,13 +197,13 @@ bool CompileTask::is_unloaded() const {
 }
 
 // RedefineClasses support
-void CompileTask::metadata_do(void f(Metadata*)) {
+void CompileTask::metadata_do(MetadataClosure* f) {
   if (is_unloaded()) {
     return;
   }
-  f(method());
+  f->do_metadata(method());
   if (hot_method() != NULL && hot_method() != method()) {
-    f(hot_method());
+    f->do_metadata(hot_method());
   }
 }
 
@@ -340,7 +340,7 @@ void CompileTask::log_task(xmlStream* log) {
   if (_osr_bci != CompileBroker::standard_entry_bci) {
     log->print(" compile_kind='osr'");  // same as nmethod::compile_kind
   } // else compile_kind='c2c'
-  if (!method.is_null())  log->method(method);
+  if (!method.is_null())  log->method(method());
   if (_osr_bci != CompileBroker::standard_entry_bci) {
     log->print(" osr_bci='%d'", _osr_bci);
   }
@@ -356,21 +356,16 @@ void CompileTask::log_task(xmlStream* log) {
 // ------------------------------------------------------------------
 // CompileTask::log_task_queued
 void CompileTask::log_task_queued() {
-  Thread* thread = Thread::current();
   ttyLocker ttyl;
-  ResourceMark rm(thread);
+  ResourceMark rm;
 
   xtty->begin_elem("task_queued");
   log_task(xtty);
   assert(_compile_reason > CompileTask::Reason_None && _compile_reason < CompileTask::Reason_Count, "Valid values");
   xtty->print(" comment='%s'", reason_name(_compile_reason));
 
-  if (_hot_method != NULL) {
-    methodHandle hot(thread, _hot_method);
-    methodHandle method(thread, _method);
-    if (hot() != method()) {
-      xtty->method(hot);
-    }
+  if (_hot_method != NULL && _hot_method != _method) {
+    xtty->method(_hot_method);
   }
   if (_hot_count != 0) {
     xtty->print(" hot_count='%d'", _hot_count);
@@ -396,6 +391,7 @@ void CompileTask::log_task_done(CompileLog* log) {
   ResourceMark rm(thread);
 
   if (!_is_success) {
+    assert(_failure_reason != NULL, "missing");
     const char* reason = _failure_reason != NULL ? _failure_reason : "unknown";
     log->elem("failure reason='%s'", reason);
   }
@@ -415,9 +411,7 @@ void CompileTask::log_task_done(CompileLog* log) {
   log->end_elem();
   log->clear_identities();   // next task will have different CI
   log->tail("task");
-  if (log->unflushed_count() > 2000) {
-    log->flush();
-  }
+  log->flush();
   log->mark_file_end();
 }
 

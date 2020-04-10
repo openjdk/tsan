@@ -29,7 +29,7 @@ package gc.arguments;
  * @bug 8006088
  * @summary Tests argument processing for initial and maximum heap size for the
  * parallel collectors.
- * @requires vm.gc=="null"
+ * @requires vm.gc.Parallel
  * @library /test/lib
  * @library /
  * @modules java.base/jdk.internal.misc
@@ -44,9 +44,7 @@ package gc.arguments;
 public class TestParallelHeapSizeFlags {
 
   public static void main(String args[]) throws Exception {
-    // just pick one of the parallel generational collectors. Sizing logic is the
-    // same.
-    final String gcName = "-XX:+UseParallelOldGC";
+    final String gcName = "-XX:+UseParallelGC";
 
     TestMaxHeapSizeTools.checkMinInitialMaxHeapFlags(gcName);
 

@@ -35,10 +35,9 @@ class StringCharBuffer                                  // package-private
     CharSequence str;
 
     StringCharBuffer(CharSequence s, int start, int end) { // package-private
-        super(-1, start, end, s.length());
+        super(-1, start, end, s.length(), null);
         int n = s.length();
-        if ((start < 0) || (start > n) || (end < start) || (end > n))
-            throw new IndexOutOfBoundsException();
+        Objects.checkFromToIndex(start, end, n);
         str = s;
         this.isReadOnly = true;
     }
@@ -69,7 +68,7 @@ class StringCharBuffer                                  // package-private
                              int limit,
                              int cap,
                              int offset) {
-        super(mark, pos, limit, cap, null, offset);
+        super(mark, pos, limit, cap, null, offset, null);
         str = s;
         this.isReadOnly = true;
     }

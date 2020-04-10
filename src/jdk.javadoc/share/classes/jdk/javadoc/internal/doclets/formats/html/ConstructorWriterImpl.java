@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1997, 2019, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 1997, 2020, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -25,25 +25,27 @@
 
 package jdk.javadoc.internal.doclets.formats.html;
 
-import jdk.javadoc.internal.doclets.formats.html.markup.Table;
-import jdk.javadoc.internal.doclets.formats.html.markup.TableHeader;
-
-import java.util.*;
+import java.util.Arrays;
+import java.util.List;
 
 import javax.lang.model.element.Element;
 import javax.lang.model.element.ExecutableElement;
 import javax.lang.model.element.TypeElement;
 
+import jdk.javadoc.internal.doclets.formats.html.markup.ContentBuilder;
+import jdk.javadoc.internal.doclets.formats.html.markup.Entity;
 import jdk.javadoc.internal.doclets.formats.html.markup.HtmlStyle;
 import jdk.javadoc.internal.doclets.formats.html.markup.HtmlTag;
 import jdk.javadoc.internal.doclets.formats.html.markup.HtmlTree;
 import jdk.javadoc.internal.doclets.formats.html.markup.StringContent;
+import jdk.javadoc.internal.doclets.formats.html.markup.Table;
+import jdk.javadoc.internal.doclets.formats.html.markup.TableHeader;
 import jdk.javadoc.internal.doclets.toolkit.ConstructorWriter;
 import jdk.javadoc.internal.doclets.toolkit.Content;
 import jdk.javadoc.internal.doclets.toolkit.MemberSummaryWriter;
 import jdk.javadoc.internal.doclets.toolkit.util.VisibleMemberTable;
 
-import static jdk.javadoc.internal.doclets.toolkit.util.VisibleMemberTable.Kind.*;
+import static jdk.javadoc.internal.doclets.toolkit.util.VisibleMemberTable.Kind.CONSTRUCTORS;
 
 
 /**
@@ -53,10 +55,6 @@ import static jdk.javadoc.internal.doclets.toolkit.util.VisibleMemberTable.Kind.
  *  If you write code that depends on this, you do so at your own risk.
  *  This code and its internal interfaces are subject to change or
  *  deletion without notice.</b>
- *
- * @author Robert Field
- * @author Atul M Dambalkar
- * @author Bhavesh Patel (Modified)
  */
 public class ConstructorWriterImpl extends AbstractExecutableMemberWriter
     implements ConstructorWriter, MemberSummaryWriter {
@@ -91,120 +89,78 @@ public class ConstructorWriterImpl extends AbstractExecutableMemberWriter
         super(writer);
     }
 
-    /**
-     * {@inheritDoc}
-     */
     @Override
     public Content getMemberSummaryHeader(TypeElement typeElement,
             Content memberSummaryTree) {
         memberSummaryTree.add(MarkerComments.START_OF_CONSTRUCTOR_SUMMARY);
-        Content memberTree = writer.getMemberTreeHeader();
-        writer.addSummaryHeader(this, typeElement, memberTree);
+        Content memberTree = new ContentBuilder();
+        writer.addSummaryHeader(this, memberTree);
         return memberTree;
     }
 
-    /**
-     * {@inheritDoc}
-     */
     @Override
     public void addMemberTree(Content memberSummaryTree, Content memberTree) {
-        writer.addMemberTree(memberSummaryTree, memberTree);
+        writer.addMemberTree(HtmlStyle.constructorSummary,
+                SectionName.CONSTRUCTOR_SUMMARY, memberSummaryTree, memberTree);
     }
 
-    /**
-     * {@inheritDoc}
-     */
     @Override
-    public Content getConstructorDetailsTreeHeader(TypeElement typeElement,
-            Content memberDetailsTree) {
+    public Content getConstructorDetailsTreeHeader(Content memberDetailsTree) {
         memberDetailsTree.add(MarkerComments.START_OF_CONSTRUCTOR_DETAILS);
-        Content constructorDetailsTree = writer.getMemberTreeHeader();
-        constructorDetailsTree.add(links.createAnchor(
-                SectionName.CONSTRUCTOR_DETAIL));
+        Content constructorDetailsTree = new ContentBuilder();
         Content heading = HtmlTree.HEADING(Headings.TypeDeclaration.DETAILS_HEADING,
                 contents.constructorDetailsLabel);
         constructorDetailsTree.add(heading);
         return constructorDetailsTree;
     }
 
-    /**
-     * {@inheritDoc}
-     */
     @Override
-    public Content getConstructorDocTreeHeader(ExecutableElement constructor,
-            Content constructorDetailsTree) {
+    public Content getConstructorDocTreeHeader(ExecutableElement constructor) {
         String erasureAnchor;
+        Content constructorDocTree = new ContentBuilder();
+        HtmlTree heading = new HtmlTree(Headings.TypeDeclaration.MEMBER_HEADING,
+                new StringContent(name(constructor)));
         if ((erasureAnchor = getErasureAnchor(constructor)) != null) {
-            constructorDetailsTree.add(links.createAnchor((erasureAnchor)));
+            heading.setId(erasureAnchor);
         }
-        constructorDetailsTree.add(links.createAnchor(writer.getAnchor(constructor)));
-        Content constructorDocTree = writer.getMemberTreeHeader();
-        Content heading = new HtmlTree(Headings.TypeDeclaration.MEMBER_HEADING);
-        heading.add(name(constructor));
         constructorDocTree.add(heading);
-        return constructorDocTree;
+        return HtmlTree.SECTION(HtmlStyle.detail, constructorDocTree)
+                .setId(links.getName(writer.getAnchor(constructor)));
     }
 
-    /**
-     * {@inheritDoc}
-     */
     @Override
     public Content getSignature(ExecutableElement constructor) {
-        Content pre = new HtmlTree(HtmlTag.PRE);
-        writer.addAnnotationInfo(constructor, pre);
-        int annotationLength = pre.charCount();
-        addModifiers(constructor, pre);
-        if (configuration.linksource) {
-            Content constructorName = new StringContent(name(constructor));
-            writer.addSrcLink(constructor, constructorName, pre);
-        } else {
-            addName(name(constructor), pre);
-        }
-        int indent = pre.charCount() - annotationLength;
-        addParameters(constructor, pre, indent);
-        addExceptions(constructor, pre, indent);
-        return pre;
+        return new MemberSignature(constructor)
+                .addParameters(getParameters(constructor, true))
+                .addExceptions(getExceptions(constructor))
+                .toContent();
     }
 
-    /**
-     * {@inheritDoc}
-     */
     @Override
     public void addDeprecated(ExecutableElement constructor, Content constructorDocTree) {
         addDeprecatedInfo(constructor, constructorDocTree);
     }
 
-    /**
-     * {@inheritDoc}
-     */
     @Override
     public void addComments(ExecutableElement constructor, Content constructorDocTree) {
         addComment(constructor, constructorDocTree);
     }
 
-    /**
-     * {@inheritDoc}
-     */
     @Override
     public void addTags(ExecutableElement constructor, Content constructorDocTree) {
         writer.addTagsInfo(constructor, constructorDocTree);
     }
 
-    /**
-     * {@inheritDoc}
-     */
     @Override
-    public Content getConstructorDetails(Content constructorDetailsTree) {
-        return HtmlTree.SECTION(getMemberTree(constructorDetailsTree));
+    public Content getConstructorDetails(Content constructorDetailsTreeHeader, Content constructorDetailsTree) {
+        Content constructorDetails = new ContentBuilder(constructorDetailsTreeHeader, constructorDetailsTree);
+        return getMemberTree(HtmlTree.SECTION(HtmlStyle.constructorDetails, constructorDetails)
+                .setId(SectionName.CONSTRUCTOR_DETAIL.getName()));
     }
 
-    /**
-     * {@inheritDoc}
-     */
     @Override
-    public Content getConstructorDoc(Content constructorDocTree,
-            boolean isLastContent) {
-        return getMemberTree(constructorDocTree, isLastContent);
+    public Content getConstructorDoc(Content constructorDocTree) {
+        return getMemberTree(constructorDocTree);
     }
 
     /**
@@ -217,9 +173,6 @@ public class ConstructorWriterImpl extends AbstractExecutableMemberWriter
         this.foundNonPubConstructor = foundNonPubConstructor;
     }
 
-    /**
-     * {@inheritDoc}
-     */
     @Override
     public void addSummaryLabel(Content memberTree) {
         Content label = HtmlTree.HEADING(Headings.TypeDeclaration.SUMMARY_HEADING,
@@ -227,9 +180,6 @@ public class ConstructorWriterImpl extends AbstractExecutableMemberWriter
         memberTree.add(label);
     }
 
-    /**
-     * {@inheritDoc}
-     */
     @Override
     public TableHeader getSummaryTableHeader(Element member) {
         if (foundNonPubConstructor) {
@@ -261,31 +211,10 @@ public class ConstructorWriterImpl extends AbstractExecutableMemberWriter
                 .setColumnStyles(bodyRowStyles);
     }
 
-    /**
-     * {@inheritDoc}
-     */
-    @Override
-    public void addSummaryAnchor(TypeElement typeElement, Content memberTree) {
-        memberTree.add(links.createAnchor(SectionName.CONSTRUCTOR_SUMMARY));
-    }
-
-    /**
-     * {@inheritDoc}
-     */
-    @Override
-    public void addInheritedSummaryAnchor(TypeElement typeElement, Content inheritedTree) {
-    }
-
-    /**
-     * {@inheritDoc}
-     */
     @Override
     public void addInheritedSummaryLabel(TypeElement typeElement, Content inheritedTree) {
     }
 
-    /**
-     * {@inheritDoc}
-     */
     @Override
     protected void addSummaryType(Element member, Content tdSummaryType) {
         if (foundNonPubConstructor) {
@@ -295,12 +224,17 @@ public class ConstructorWriterImpl extends AbstractExecutableMemberWriter
             } else if (utils.isPrivate(member)) {
                 code.add("private ");
             } else if (utils.isPublic(member)) {
-                code.add(Contents.SPACE);
+                code.add(Entity.NO_BREAK_SPACE);
             } else {
                 code.add(
                         resources.getText("doclet.Package_private"));
             }
             tdSummaryType.add(code);
         }
+    }
+
+    @Override
+    public Content getMemberTreeHeader(){
+        return writer.getMemberTreeHeader();
     }
 }
