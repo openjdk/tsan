@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013, 2018, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2013, 2019, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -24,8 +24,10 @@
 
 package org.graalvm.compiler.replacements.nodes;
 
-import jdk.vm.ci.meta.JavaKind;
-import jdk.vm.ci.meta.Value;
+import static org.graalvm.compiler.core.common.GraalOptions.UseGraalStubs;
+import static org.graalvm.compiler.nodeinfo.InputType.Memory;
+
+import org.graalvm.compiler.core.common.spi.ForeignCallLinkage;
 import org.graalvm.compiler.core.common.type.StampFactory;
 import org.graalvm.compiler.graph.NodeClass;
 import org.graalvm.compiler.nodeinfo.NodeCycles;
@@ -42,7 +44,8 @@ import org.graalvm.compiler.nodes.spi.NodeLIRBuilderTool;
 import jdk.internal.vm.compiler.word.LocationIdentity;
 import jdk.internal.vm.compiler.word.Pointer;
 
-import static org.graalvm.compiler.nodeinfo.InputType.Memory;
+import jdk.vm.ci.meta.JavaKind;
+import jdk.vm.ci.meta.Value;
 
 // JaCoCo Exclude
 
@@ -85,17 +88,33 @@ public final class ArrayRegionEqualsNode extends FixedWithNextNode implements LI
     @NodeIntrinsic
     public static native boolean regionEquals(Pointer array1, Pointer array2, int length, @ConstantNodeParameter JavaKind kind1, @ConstantNodeParameter JavaKind kind2);
 
+    public JavaKind getKind1() {
+        return kind1;
+    }
+
+    public JavaKind getKind2() {
+        return kind2;
+    }
+
+    public ValueNode getLength() {
+        return length;
+    }
+
     @Override
     public void generate(NodeLIRBuilderTool gen) {
-        int constantLength = -1;
-        if (length.isConstant()) {
-            constantLength = length.asJavaConstant().asInt();
+        if (UseGraalStubs.getValue(graph().getOptions())) {
+            ForeignCallLinkage linkage = gen.lookupGraalStub(this);
+            if (linkage != null) {
+                Value result = gen.getLIRGeneratorTool().emitForeignCall(linkage, null, gen.operand(array1), gen.operand(array2), gen.operand(length));
+                gen.setResult(this, result);
+                return;
+            }
         }
         Value result;
         if (kind1 == kind2) {
-            result = gen.getLIRGeneratorTool().emitArrayEquals(kind1, gen.operand(array1), gen.operand(array2), gen.operand(length), constantLength, true);
+            result = gen.getLIRGeneratorTool().emitArrayEquals(kind1, gen.operand(array1), gen.operand(array2), gen.operand(length), true);
         } else {
-            result = gen.getLIRGeneratorTool().emitArrayEquals(kind1, kind2, gen.operand(array1), gen.operand(array2), gen.operand(length), constantLength, true);
+            result = gen.getLIRGeneratorTool().emitArrayEquals(kind1, kind2, gen.operand(array1), gen.operand(array2), gen.operand(length), true);
         }
         gen.setResult(this, result);
     }

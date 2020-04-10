@@ -141,9 +141,9 @@ void TsanIgnoreList::parse_from_line(char* line) {
   FieldMatcher::Mode field_mode = make_pattern(field_pattern);
   // If we match against Any, no need for a symbol, else create the symbol.
   Symbol* class_symbol = (class_mode == FieldMatcher::Any) ? NULL :
-      SymbolTable::new_symbol(class_pattern, CHECK);
+      SymbolTable::new_symbol(class_pattern);
   Symbol* field_symbol = (field_mode == FieldMatcher::Any) ? NULL :
-      SymbolTable::new_symbol(field_pattern, CHECK);
+      SymbolTable::new_symbol(field_pattern);
   // Add matcher to beginning of linked list.
   if (class_mode == FieldMatcher::Exact && field_mode == FieldMatcher::Exact) {
     _exact_match = new FieldMatcher(class_symbol, class_mode, field_symbol,

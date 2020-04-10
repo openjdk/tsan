@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2018, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2018, 2019, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -36,7 +36,8 @@
 #include "gc/z/zUnload.hpp"
 #include "oops/access.inline.hpp"
 
-static const ZStatSubPhase ZSubPhaseConcurrentClassesUnload("Concurrent Classes Unload");
+static const ZStatSubPhase ZSubPhaseConcurrentClassesUnlink("Concurrent Classes Unlink");
+static const ZStatSubPhase ZSubPhaseConcurrentClassesPurge("Concurrent Classes Purge");
 
 class ZIsUnloadingOopClosure : public OopClosure {
 private:
@@ -71,7 +72,7 @@ public:
     ZReentrantLock* const lock = ZNMethod::lock_for_nmethod(nm);
     ZLocker<ZReentrantLock> locker(lock);
     ZIsUnloadingOopClosure cl;
-    nm->oops_do(&cl, true /* allow_zombie */);
+    ZNMethod::nmethod_oops_do(nm, &cl);
     return cl.is_unloading();
   }
 };
@@ -126,22 +127,31 @@ void ZUnload::prepare() {
 }
 
 void ZUnload::unlink() {
+  if (!ClassUnloading) {
+    return;
+  }
+
+  ZStatTimer timer(ZSubPhaseConcurrentClassesUnlink);
   SuspendibleThreadSetJoiner sts;
   bool unloading_occurred;
 
   {
-    MutexLockerEx ml(ClassLoaderDataGraph_lock);
+    MutexLocker ml(ClassLoaderDataGraph_lock);
     unloading_occurred = SystemDictionary::do_unloading(ZStatPhase::timer());
   }
 
   Klass::clean_weak_klass_links(unloading_occurred);
-
   ZNMethod::unlink(_workers, unloading_occurred);
-
   DependencyContext::cleaning_end();
 }
 
 void ZUnload::purge() {
+  if (!ClassUnloading) {
+    return;
+  }
+
+  ZStatTimer timer(ZSubPhaseConcurrentClassesPurge);
+
   {
     SuspendibleThreadSetJoiner sts;
     ZNMethod::purge(_workers);
@@ -149,29 +159,6 @@ void ZUnload::purge() {
 
   ClassLoaderDataGraph::purge();
   CodeCache::purge_exception_caches();
-}
-
-class ZUnloadRendezvousClosure : public ThreadClosure {
-public:
-  void do_thread(Thread* thread) {}
-};
-
-void ZUnload::unload() {
-  if (!ClassUnloading) {
-    return;
-  }
-
-  ZStatTimer timer(ZSubPhaseConcurrentClassesUnload);
-
-  // Unlink stale metadata and nmethods
-  unlink();
-
-  // Make sure stale metadata and nmethods are no longer observable
-  ZUnloadRendezvousClosure cl;
-  Handshake::execute(&cl);
-
-  // Purge stale metadata and nmethods that were unlinked
-  purge();
 }
 
 void ZUnload::finish() {

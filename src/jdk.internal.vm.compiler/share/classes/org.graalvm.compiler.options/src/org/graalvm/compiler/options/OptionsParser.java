@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014, 2018, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2014, 2019, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -51,29 +51,12 @@ public class OptionsParser {
         if (IS_IN_NATIVE_IMAGE || cachedOptionDescriptors != null) {
             return cachedOptionDescriptors;
         }
-        boolean java8OrEarlier = System.getProperty("java.specification.version").compareTo("1.9") < 0;
-        ClassLoader loader;
-        if (java8OrEarlier) {
-            // On JDK 8, Graal and its extensions are loaded by same class loader.
-            loader = OptionDescriptors.class.getClassLoader();
-        } else {
-            /*
-             * The Graal module (i.e., jdk.internal.vm.compiler) is loaded by the platform class
-             * loader as of JDK 9. Modules that depend on and extend Graal are loaded by the app
-             * class loader. As such, we need to start the provider search at the app class loader
-             * instead of the platform class loader.
-             */
-            loader = ClassLoader.getSystemClassLoader();
-        }
-        Iterable<OptionDescriptors> result = ServiceLoader.load(OptionDescriptors.class, loader);
-        if (IS_BUILDING_NATIVE_IMAGE) {
-            ArrayList<OptionDescriptors> optionDescriptors = new ArrayList<>();
-            for (OptionDescriptors descriptors : result) {
-                optionDescriptors.add(descriptors);
-            }
-            OptionsParser.cachedOptionDescriptors = optionDescriptors;
-        }
-        return result;
+        return ModuleSupport.getOptionsLoader();
+    }
+
+    public static void setCachedOptionDescriptors(List<OptionDescriptors> list) {
+        assert IS_BUILDING_NATIVE_IMAGE : "Used to pre-initialize the option descriptors during native image generation";
+        OptionsParser.cachedOptionDescriptors = list;
     }
 
     /**
@@ -149,12 +132,19 @@ public class OptionsParser {
             throw new IllegalArgumentException(msg.toString());
         }
 
+        Object value = parseOptionValue(desc, uncheckedValue);
+
+        desc.getOptionKey().update(values, value);
+    }
+
+    /** Parses a given option value with a known descriptor. */
+    public static Object parseOptionValue(OptionDescriptor desc, Object uncheckedValue) {
         Class<?> optionType = desc.getOptionValueType();
         Object value;
         if (!(uncheckedValue instanceof String)) {
             if (optionType != uncheckedValue.getClass()) {
                 String type = optionType.getSimpleName();
-                throw new IllegalArgumentException(type + " option '" + name + "' must have " + type + " value, not " + uncheckedValue.getClass() + " [toString: " + uncheckedValue + "]");
+                throw new IllegalArgumentException(type + " option '" + desc.getName() + "' must have " + type + " value, not " + uncheckedValue.getClass() + " [toString: " + uncheckedValue + "]");
             }
             value = uncheckedValue;
         } else {
@@ -165,7 +155,7 @@ public class OptionsParser {
                 } else if ("false".equals(valueString)) {
                     value = Boolean.FALSE;
                 } else {
-                    throw new IllegalArgumentException("Boolean option '" + name + "' must have value \"true\" or \"false\", not \"" + uncheckedValue + "\"");
+                    throw new IllegalArgumentException("Boolean option '" + desc.getName() + "' must have value \"true\" or \"false\", not \"" + uncheckedValue + "\"");
                 }
             } else if (optionType == String.class) {
                 value = valueString;
@@ -173,7 +163,7 @@ public class OptionsParser {
                 value = ((EnumOptionKey<?>) desc.getOptionKey()).valueOf(valueString);
             } else {
                 if (valueString.isEmpty()) {
-                    throw new IllegalArgumentException("Non empty value required for option '" + name + "'");
+                    throw new IllegalArgumentException("Non empty value required for option '" + desc.getName() + "'");
                 }
                 try {
                     if (optionType == Float.class) {
@@ -185,15 +175,14 @@ public class OptionsParser {
                     } else if (optionType == Long.class) {
                         value = Long.valueOf(parseLong(valueString));
                     } else {
-                        throw new IllegalArgumentException("Wrong value for option '" + name + "'");
+                        throw new IllegalArgumentException("Wrong value for option '" + desc.getName() + "'");
                     }
                 } catch (NumberFormatException nfe) {
-                    throw new IllegalArgumentException("Value for option '" + name + "' has invalid number format: " + valueString);
+                    throw new IllegalArgumentException("Value for option '" + desc.getName() + "' has invalid number format: " + valueString);
                 }
             }
         }
-
-        desc.getOptionKey().update(values, value);
+        return value;
     }
 
     private static long parseLong(String v) {

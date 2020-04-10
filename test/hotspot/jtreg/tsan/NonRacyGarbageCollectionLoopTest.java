@@ -29,7 +29,6 @@
  * @build AbstractLoop TsanRunner
  * @run main/othervm -XX:+UseParallelGC NonRacyGarbageCollectionLoopTest
  * @run main/othervm -XX:+UseG1GC NonRacyGarbageCollectionLoopTest
- * @run main/othervm -XX:+UseConcMarkSweepGC NonRacyGarbageCollectionLoopTest
  * @run main/othervm -XX:+UseSerialGC NonRacyGarbageCollectionLoopTest
  */
 

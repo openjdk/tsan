@@ -131,7 +131,7 @@ class PhiNode : public TypeNode {
   const int _inst_offset; // Offset of the instance memory slice.
   // Size is bigger to hold the _adr_type field.
   virtual uint hash() const;    // Check the type
-  virtual uint cmp( const Node &n ) const;
+  virtual bool cmp( const Node &n ) const;
   virtual uint size_of() const { return sizeof(*this); }
 
   // Determine if CMoveNode::is_cmove_id can be used at this join point.
@@ -289,7 +289,7 @@ class IfNode : public MultiBranchNode {
 
 private:
   // Helper methods for fold_compares
-  bool cmpi_folds(PhaseIterGVN* igvn);
+  bool cmpi_folds(PhaseIterGVN* igvn, bool fold_ne = false);
   bool is_ctrl_folds(Node* ctrl, PhaseIterGVN* igvn);
   bool has_shared_region(ProjNode* proj, ProjNode*& success, ProjNode*& fail);
   bool has_only_uncommon_traps(ProjNode* proj, ProjNode*& success, ProjNode*& fail, PhaseIterGVN* igvn);
@@ -307,6 +307,8 @@ protected:
   ProjNode* range_check_trap_proj(int& flip, Node*& l, Node*& r);
   Node* Ideal_common(PhaseGVN *phase, bool can_reshape);
   Node* search_identical(int dist);
+
+  Node* simple_subsuming(PhaseIterGVN* igvn);
 
 public:
 
@@ -465,7 +467,7 @@ protected:
 // Undefined behavior if passed-in index is not inside the table.
 class PCTableNode : public MultiBranchNode {
   virtual uint hash() const;    // Target count; table size
-  virtual uint cmp( const Node &n ) const;
+  virtual bool cmp( const Node &n ) const;
   virtual uint size_of() const { return sizeof(*this); }
 
 public:
@@ -507,7 +509,7 @@ public:
 
 class JumpProjNode : public JProjNode {
   virtual uint hash() const;
-  virtual uint cmp( const Node &n ) const;
+  virtual bool cmp( const Node &n ) const;
   virtual uint size_of() const { return sizeof(*this); }
 
  private:
@@ -550,7 +552,7 @@ public:
 // the projection doesn't lead to an exception handler.
 class CatchProjNode : public CProjNode {
   virtual uint hash() const;
-  virtual uint cmp( const Node &n ) const;
+  virtual bool cmp( const Node &n ) const;
   virtual uint size_of() const { return sizeof(*this); }
 
 private:

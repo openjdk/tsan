@@ -96,7 +96,7 @@ import java.util.function.Function;
  *      }
  *
  *      // test methods...
- *      @Test
+ *      {@literal @}Test
  *      void test() {
  *          javadoc(<i>args</i>);
  *          checkExit(Exit.OK);
@@ -134,16 +134,14 @@ import java.util.function.Function;
  * of javadoc invocations is important, do that within a single method.
  * If the invocations are independent, for better clarity, use separate
  * test methods, each with their own set of checks on the results.
- *
- * @author Doug Kramer
- * @author Jamie Ho
- * @author Jonathan Gibbons (rewrite)
  */
 public abstract class JavadocTester {
 
     public static final String FS = System.getProperty("file.separator");
     public static final String PS = System.getProperty("path.separator");
     public static final String NL = System.getProperty("line.separator");
+    public static final String thisRelease = System.getProperty("java.specification.version");
+
     public static final Path currDir = Paths.get(".").toAbsolutePath().normalize();
 
     public enum Output {
@@ -772,7 +770,7 @@ public abstract class JavadocTester {
         return readFile(new File(baseDir), fileName);
     }
 
-    private String readFile(Path file) {
+    protected String readFile(Path file) {
         File baseDir;
         if (file.startsWith(outputDir.toPath())) {
             baseDir = outputDir;

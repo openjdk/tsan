@@ -23,10 +23,9 @@
 
 /*
  * @test
- * @bug 4645058 4747738 4855054 8024756 8141492 8196202 8205593
+ * @bug 4645058 4747738 4855054 8024756 8141492 8196202 8205593 8215599
  * @summary  Javascript IE load error when linked by -linkoffline
  *           Window title shouldn't change when loading left frames (javascript)
- * @author dkramer
  * @library ../../lib
  * @modules jdk.javadoc/jdk.javadoc.internal.tool
  * @build javadoc.tester.*
@@ -46,7 +45,6 @@ public class JavascriptWinTitle extends JavadocTester {
     public void test() {
         javadoc("-d", "out",
                 "-source", "8",
-                "--frames",
                 "-doctitle", "Document Title",
                 "-windowtitle", "Window Title",
                 "-overview", testSrc("overview.html"),
@@ -54,26 +52,13 @@ public class JavascriptWinTitle extends JavadocTester {
                 "-sourcepath", testSrc,
                 "p1", "p2");
         checkExit(Exit.OK);
-        checkOutput("overview-summary.html", true,
+        checkOutput("index.html", true,
                 "<script type=\"text/javascript\">",
                 "<body class=\"package-index\">");
 
         // Test that "onload" is not present in BODY tag:
         checkOutput("p1/package-summary.html", true, "<body class=\"package-declaration\">");
-        checkOutput("overview-frame.html", true, "<body class=\"package-index-frame\">");
-        checkOutput("allclasses-frame.html", true, "<body class=\"all-classes-frame\">");
-        checkOutput("p1/package-frame.html", true, "<body class=\"package-frame\">");
 
-        // Test that win title javascript is followed by NOSCRIPT code.
-        checkOutput("p1/C.html", true,
-                "<script type=\"text/javascript\"><!--\n"
-                + "    try {\n"
-                + "        if (location.href.indexOf('is-external=true') == -1) {\n"
-                + "            parent.document.title=\"C (Window Title)\";\n"
-                + "        }\n"
-                + "    }\n"
-                + "    catch(err) {\n"
-                + "    }\n"
-                + "//-->\n");
+        checkOutput("p1/C.html", true, "<title>C (Window Title)</title>");
     }
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2003, 2019, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2003, 2020, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -38,7 +38,6 @@ import java.util.function.Predicate;
 
 import javax.lang.model.element.Element;
 
-import jdk.javadoc.internal.doclets.formats.html.Contents;
 import jdk.javadoc.internal.doclets.toolkit.Content;
 
 /**
@@ -77,6 +76,7 @@ public class Table {
     private final List<Content> bodyRows;
     private final List<Integer> bodyRowMasks;
     private String rowIdPrefix = "i";
+    private String id;
 
     /**
      * Creates a builder for an HTML table.
@@ -190,7 +190,6 @@ public class Table {
      *
      * <p>Notes:
      * <ul>
-     * <li>This currently does not use a {@code <thead>} tag, but probably should, eventually
      * <li>The column styles are not currently applied to the header, but probably should, eventually
      * </ul>
      *
@@ -274,6 +273,17 @@ public class Table {
      */
     public Table setRowIdPrefix(String prefix) {
         rowIdPrefix = prefix;
+        return this;
+    }
+
+    /**
+     * Sets the id attribute of the table.
+     *
+     * @param id the id
+     * @return this object
+     */
+    public Table setId(String id) {
+        this.id = id;
         return this;
     }
 
@@ -397,6 +407,9 @@ public class Table {
     public Content toContent() {
         HtmlTree mainDiv = new HtmlTree(HtmlTag.DIV);
         mainDiv.setStyle(tableStyle);
+        if (id != null) {
+            mainDiv.setId(id);
+        }
         HtmlTree table = new HtmlTree(HtmlTag.TABLE);
         if (tabMap == null || tabs.size() == 1) {
             if (tabMap == null) {
@@ -450,9 +463,11 @@ public class Table {
 
     private Content getTableBody() {
         ContentBuilder tableContent = new ContentBuilder();
-        tableContent.add(header.toContent());
+        Content thead = new HtmlTree(HtmlTag.THEAD);
+        thead.add(header.toContent());
+        tableContent.add(thead);
         Content tbody = new HtmlTree(HtmlTag.TBODY);
-        bodyRows.forEach(row -> tbody.add(row));
+        bodyRows.forEach(tbody::add);
         tableContent.add(tbody);
         return tableContent;
     }
@@ -530,6 +545,6 @@ public class Table {
     private HtmlTree getCaption(Content title) {
         return new HtmlTree(HtmlTag.CAPTION,
                 HtmlTree.SPAN(title),
-                HtmlTree.SPAN(tabEnd, Contents.SPACE));
+                HtmlTree.SPAN(tabEnd, Entity.NO_BREAK_SPACE));
     }
 }

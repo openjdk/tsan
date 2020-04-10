@@ -29,11 +29,10 @@
  * @modules java.base/jdk.internal.misc
  * @modules java.compiler
  *          java.instrument
- *          jdk.jartool/sun.tools.jar
  * @compile ../../NamedBuffer.java
  * @compile redef/Xost.java
  * @run main RedefineClassHelper
- * @run main/othervm -javaagent:redefineagent.jar -Xlog:redefine+class+update*=debug,membername+table=debug MethodHandleDeletedMethod
+ * @run main/othervm -XX:+AllowRedefinitionToAddDeleteMethods -javaagent:redefineagent.jar -Xlog:redefine+class+update*=debug,membername+table=debug MethodHandleDeletedMethod
  */
 
 import java.io.File;

@@ -284,7 +284,7 @@ namespace TsanOopMapImpl {
     for (size_t i = 0; i < map_size; i++) {
       oopDesc *source_obj = oop_map->oop_at(i);
 
-      if (source_obj != NULL && heap->is_in_reserved(source_obj)) {
+      if (source_obj != NULL && heap->is_in(source_obj)) {
         uintx obj_size = oop_map->oop_size_at(i);
         size_t obj_size_bytes = obj_size * HeapWordSize;
         if (is_alive->do_object_b(source_obj)) {
@@ -298,7 +298,7 @@ namespace TsanOopMapImpl {
           // pointer phase, before the collector moves the objects. Thus,
           // we cannot use heap->is_in() or oopDesc::is_oop() to check
           // target_oop.
-          assert(heap->is_in_reserved(target_oop), "Adjustment failed");
+          assert(heap->is_in(target_oop), "Adjustment failed");
           oopDesc *target_obj = target_oop;
           new_map->put(target_obj, obj_size);
           if (target_obj == source_obj) {
@@ -508,7 +508,7 @@ void TsanOopMap::add_oop_with_size(oopDesc *addr, int size) {
   guarantee(addr != NULL, "null oop");
   bool alloc = false;
   {
-    MutexLockerEx mu(TsanOopMap_lock, Mutex::_no_safepoint_check_flag);
+    MutexLocker mu(TsanOopMap_lock, Mutex::_no_safepoint_check_flag);
     // N.B. addr->size() may not be available yet!
     alloc = TsanOopMapImpl::oop_map->put(addr, size);
   }
@@ -529,7 +529,7 @@ bool TsanOopMap::exists(oopDesc *addr) {
   guarantee(addr != NULL, "null oop");
   bool in_map = false;
   {
-    MutexLockerEx mu(TsanOopMap_lock, Mutex::_no_safepoint_check_flag);
+    MutexLocker mu(TsanOopMap_lock, Mutex::_no_safepoint_check_flag);
     in_map = TsanOopMapImpl::oop_map->exists(addr);
   }
   return in_map;

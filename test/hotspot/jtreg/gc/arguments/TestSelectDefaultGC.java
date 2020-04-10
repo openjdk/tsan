@@ -29,7 +29,8 @@ package gc.arguments;
  * @bug 8068582
  * @key gc
  * @library /test/lib
- * @requires vm.gc=="null"
+ * @library /
+ * @requires vm.gc.Serial & vm.gc.G1
  * @modules java.base/jdk.internal.misc
  *          java.management
  * @run driver gc.arguments.TestSelectDefaultGC
@@ -52,7 +53,7 @@ public class TestSelectDefaultGC {
         };
 
         // Start VM without specifying GC
-        ProcessBuilder pb = ProcessTools.createJavaProcessBuilder(args);
+        ProcessBuilder pb = GCArguments.createJavaProcessBuilder(args);
         OutputAnalyzer output = new OutputAnalyzer(pb.start());
         output.shouldHaveExitValue(0);
 
@@ -63,8 +64,6 @@ public class TestSelectDefaultGC {
         assertVMOption(output, "UseG1GC",            isServer);
         // Serial is default for non-server class machines
         assertVMOption(output, "UseSerialGC",        !isServer);
-        // CMS is never default
-        assertVMOption(output, "UseConcMarkSweepGC", false);
     }
 
     public static void main(String[] args) throws Exception {

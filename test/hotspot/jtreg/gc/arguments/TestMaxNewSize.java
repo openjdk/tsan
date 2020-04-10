@@ -24,31 +24,48 @@
 package gc.arguments;
 
 /*
- * @test TestMaxNewSize
+ * @test TestMaxNewSizeSerial
  * @key gc
  * @bug 7057939
  * @summary Make sure that MaxNewSize always has a useful value after argument
  * processing.
- * @requires vm.gc=="null"
+ * @requires vm.gc.Serial
  * @library /test/lib
+ * @library /
  * @modules java.base/jdk.internal.misc
  *          java.management
  * @run main gc.arguments.TestMaxNewSize -XX:+UseSerialGC
- * @run main gc.arguments.TestMaxNewSize -XX:+UseParallelGC
- * @run main gc.arguments.TestMaxNewSize -XX:+UseG1GC
  * @author thomas.schatzl@oracle.com, jesper.wilhelmsson@oracle.com
  */
 
 /*
- * @test TestMaxNewSizeCMS
+ * @test TestMaxNewSizeParallel
  * @key gc
  * @bug 7057939
- * @comment Graal does not support CMS
- * @requires vm.gc=="null" & !vm.graal.enabled
+ * @summary Make sure that MaxNewSize always has a useful value after argument
+ * processing.
+ * @requires vm.gc.Parallel
  * @library /test/lib
+ * @library /
  * @modules java.base/jdk.internal.misc
  *          java.management
- * @run main gc.arguments.TestMaxNewSize -XX:+UseConcMarkSweepGC
+ * @run main gc.arguments.TestMaxNewSize -XX:+UseParallelGC
+ * @author thomas.schatzl@oracle.com, jesper.wilhelmsson@oracle.com
+ */
+
+/*
+ * @test TestMaxNewSizeG1
+ * @key gc
+ * @bug 7057939
+ * @summary Make sure that MaxNewSize always has a useful value after argument
+ * processing.
+ * @requires vm.gc.G1
+ * @library /test/lib
+ * @library /
+ * @modules java.base/jdk.internal.misc
+ *          java.management
+ * @run main gc.arguments.TestMaxNewSize -XX:+UseG1GC
+ * @author thomas.schatzl@oracle.com, jesper.wilhelmsson@oracle.com
  */
 
 import java.util.regex.Matcher;
@@ -78,7 +95,7 @@ public class TestMaxNewSize {
     finalargs.addAll(Arrays.asList(flags));
     finalargs.add("-version");
 
-    ProcessBuilder pb = ProcessTools.createJavaProcessBuilder(finalargs.toArray(new String[0]));
+    ProcessBuilder pb = GCArguments.createJavaProcessBuilder(finalargs.toArray(new String[0]));
     OutputAnalyzer output = new OutputAnalyzer(pb.start());
     output.shouldContain("Initial young gen size set larger than the maximum young gen size");
   }
@@ -101,7 +118,7 @@ public class TestMaxNewSize {
     finalargs.add("-XX:+PrintFlagsFinal");
     finalargs.add("-version");
 
-    ProcessBuilder pb = ProcessTools.createJavaProcessBuilder(finalargs.toArray(new String[0]));
+    ProcessBuilder pb = GCArguments.createJavaProcessBuilder(finalargs.toArray(new String[0]));
     OutputAnalyzer output = new OutputAnalyzer(pb.start());
     output.shouldHaveExitValue(0);
     String stdout = output.getStdout();

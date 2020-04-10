@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1999, 2019, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 1999, 2020, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -30,6 +30,8 @@
 #include "runtime/frame.inline.hpp"
 #include "runtime/interfaceSupport.inline.hpp"
 #include "services/memTracker.hpp"
+#include "runtime/atomic.hpp"
+#include "runtime/orderAccess.hpp"
 #include "utilities/align.hpp"
 #include "utilities/events.hpp"
 #include "utilities/formatBuffer.hpp"
@@ -47,6 +49,7 @@
 #include <sys/utsname.h>
 #include <time.h>
 #include <unistd.h>
+#include <utmpx.h>
 
 // Todo: provide a os::get_max_process_id() or similar. Number of processes
 // may have been configured, can be read more accurately from proc fs etc.
@@ -167,48 +170,56 @@ size_t os::lasterror(char *buf, size_t len) {
   return n;
 }
 
-bool os::is_debugger_attached() {
-  // not implemented
-  return false;
-}
-
 void os::wait_for_keypress_at_exit(void) {
   // don't do anything on posix platforms
   return;
 }
 
 int os::create_file_for_heap(const char* dir) {
+  int fd;
 
-  const char name_template[] = "/jvmheap.XXXXXX";
-
-  size_t fullname_len = strlen(dir) + strlen(name_template);
-  char *fullname = (char*)os::malloc(fullname_len + 1, mtInternal);
-  if (fullname == NULL) {
-    vm_exit_during_initialization(err_msg("Malloc failed during creation of backing file for heap (%s)", os::strerror(errno)));
+#if defined(LINUX) && defined(O_TMPFILE)
+  char* native_dir = os::strdup(dir);
+  if (native_dir == NULL) {
+    vm_exit_during_initialization(err_msg("strdup failed during creation of backing file for heap (%s)", os::strerror(errno)));
     return -1;
   }
-  int n = snprintf(fullname, fullname_len + 1, "%s%s", dir, name_template);
-  assert((size_t)n == fullname_len, "Unexpected number of characters in string");
+  os::native_path(native_dir);
+  fd = os::open(dir, O_TMPFILE | O_RDWR, S_IRUSR | S_IWUSR);
+  os::free(native_dir);
 
-  os::native_path(fullname);
+  if (fd == -1)
+#endif
+  {
+    const char name_template[] = "/jvmheap.XXXXXX";
 
-  // set the file creation mask.
-  mode_t file_mode = S_IRUSR | S_IWUSR;
+    size_t fullname_len = strlen(dir) + strlen(name_template);
+    char *fullname = (char*)os::malloc(fullname_len + 1, mtInternal);
+    if (fullname == NULL) {
+      vm_exit_during_initialization(err_msg("Malloc failed during creation of backing file for heap (%s)", os::strerror(errno)));
+      return -1;
+    }
+    int n = snprintf(fullname, fullname_len + 1, "%s%s", dir, name_template);
+    assert((size_t)n == fullname_len, "Unexpected number of characters in string");
 
-  // create a new file.
-  int fd = mkstemp(fullname);
+    os::native_path(fullname);
 
-  if (fd < 0) {
-    warning("Could not create file for heap with template %s", fullname);
+    // create a new file.
+    fd = mkstemp(fullname);
+
+    if (fd < 0) {
+      warning("Could not create file for heap with template %s", fullname);
+      os::free(fullname);
+      return -1;
+    } else {
+      // delete the name from the filesystem. When 'fd' is closed, the file (and space) will be deleted.
+      int ret = unlink(fullname);
+      assert_with_errno(ret == 0, "unlink returned error");
+    }
+
     os::free(fullname);
-    return -1;
   }
 
-  // delete the name from the filesystem. When 'fd' is closed, the file (and space) will be deleted.
-  int ret = unlink(fullname);
-  assert_with_errno(ret == 0, "unlink returned error");
-
-  os::free(fullname);
   return fd;
 }
 
@@ -373,10 +384,35 @@ struct tm* os::gmtime_pd(const time_t* clock, struct tm*  res) {
 void os::Posix::print_load_average(outputStream* st) {
   st->print("load average:");
   double loadavg[3];
-  os::loadavg(loadavg, 3);
-  st->print("%0.02f %0.02f %0.02f", loadavg[0], loadavg[1], loadavg[2]);
+  int res = os::loadavg(loadavg, 3);
+  if (res != -1) {
+    st->print("%0.02f %0.02f %0.02f", loadavg[0], loadavg[1], loadavg[2]);
+  } else {
+    st->print(" Unavailable");
+  }
   st->cr();
 }
+
+// boot/uptime information;
+// unfortunately it does not work on macOS and Linux because the utx chain has no entry
+// for reboot at least on my test machines
+void os::Posix::print_uptime_info(outputStream* st) {
+  int bootsec = -1;
+  int currsec = time(NULL);
+  struct utmpx* ent;
+  setutxent();
+  while ((ent = getutxent())) {
+    if (!strcmp("system boot", ent->ut_line)) {
+      bootsec = ent->ut_tv.tv_sec;
+      break;
+    }
+  }
+
+  if (bootsec != -1) {
+    os::print_dhm(st, "OS uptime:", (long) (currsec-bootsec));
+  }
+}
+
 
 void os::Posix::print_rlimit_info(outputStream* st) {
   st->print("rlimit:");
@@ -396,6 +432,10 @@ void os::Posix::print_rlimit_info(outputStream* st) {
 #if defined(AIX)
   st->print(", NPROC ");
   st->print("%d", sysconf(_SC_CHILD_MAX));
+  st->print(", THREADS ");
+  getrlimit(RLIMIT_THREADS, &rlim);
+  if (rlim.rlim_cur == RLIM_INFINITY) st->print("infinity");
+  else st->print(UINT64_FORMAT, uint64_t(rlim.rlim_cur));
 #elif !defined(SOLARIS)
   st->print(", NPROC ");
   getrlimit(RLIMIT_NPROC, &rlim);
@@ -412,6 +452,11 @@ void os::Posix::print_rlimit_info(outputStream* st) {
   getrlimit(RLIMIT_AS, &rlim);
   if (rlim.rlim_cur == RLIM_INFINITY) st->print("infinity");
   else st->print(UINT64_FORMAT "k", uint64_t(rlim.rlim_cur) / 1024);
+
+  st->print(", CPU ");
+  getrlimit(RLIMIT_CPU, &rlim);
+  if (rlim.rlim_cur == RLIM_INFINITY) st->print("infinity");
+  else st->print(UINT64_FORMAT, uint64_t(rlim.rlim_cur));
 
   st->print(", DATA ");
   getrlimit(RLIMIT_DATA, &rlim);
@@ -624,78 +669,6 @@ char* os::build_agent_function_name(const char *sym_name, const char *lib_name,
   return agent_entry_name;
 }
 
-int os::sleep(Thread* thread, jlong millis, bool interruptible) {
-  assert(thread == Thread::current(),  "thread consistency check");
-
-  ParkEvent * const slp = thread->_SleepEvent ;
-  slp->reset() ;
-  OrderAccess::fence() ;
-
-  if (interruptible) {
-    jlong prevtime = javaTimeNanos();
-
-    for (;;) {
-      if (os::is_interrupted(thread, true)) {
-        return OS_INTRPT;
-      }
-
-      jlong newtime = javaTimeNanos();
-
-      if (newtime - prevtime < 0) {
-        // time moving backwards, should only happen if no monotonic clock
-        // not a guarantee() because JVM should not abort on kernel/glibc bugs
-        assert(!os::supports_monotonic_clock(), "unexpected time moving backwards detected in os::sleep(interruptible)");
-      } else {
-        millis -= (newtime - prevtime) / NANOSECS_PER_MILLISEC;
-      }
-
-      if (millis <= 0) {
-        return OS_OK;
-      }
-
-      prevtime = newtime;
-
-      {
-        assert(thread->is_Java_thread(), "sanity check");
-        JavaThread *jt = (JavaThread *) thread;
-        ThreadBlockInVM tbivm(jt);
-        OSThreadWaitState osts(jt->osthread(), false /* not Object.wait() */);
-
-        jt->set_suspend_equivalent();
-        // cleared by handle_special_suspend_equivalent_condition() or
-        // java_suspend_self() via check_and_wait_while_suspended()
-
-        slp->park(millis);
-
-        // were we externally suspended while we were waiting?
-        jt->check_and_wait_while_suspended();
-      }
-    }
-  } else {
-    OSThreadWaitState osts(thread->osthread(), false /* not Object.wait() */);
-    jlong prevtime = javaTimeNanos();
-
-    for (;;) {
-      // It'd be nice to avoid the back-to-back javaTimeNanos() calls on
-      // the 1st iteration ...
-      jlong newtime = javaTimeNanos();
-
-      if (newtime - prevtime < 0) {
-        // time moving backwards, should only happen if no monotonic clock
-        // not a guarantee() because JVM should not abort on kernel/glibc bugs
-        assert(!os::supports_monotonic_clock(), "unexpected time moving backwards detected on os::sleep(!interruptible)");
-      } else {
-        millis -= (newtime - prevtime) / NANOSECS_PER_MILLISEC;
-      }
-
-      if (millis <= 0) break ;
-
-      prevtime = newtime;
-      slp->park(millis);
-    }
-    return OS_OK ;
-  }
-}
 
 void os::naked_short_nanosleep(jlong ns) {
   struct timespec req;
@@ -708,64 +681,9 @@ void os::naked_short_nanosleep(jlong ns) {
 
 void os::naked_short_sleep(jlong ms) {
   assert(ms < MILLIUNITS, "Un-interruptable sleep, short time use only");
-  os::naked_short_nanosleep(ms * (NANOUNITS / MILLIUNITS));
+  os::naked_short_nanosleep(millis_to_nanos(ms));
   return;
 }
-
-////////////////////////////////////////////////////////////////////////////////
-// interrupt support
-
-void os::interrupt(Thread* thread) {
-  debug_only(Thread::check_for_dangling_thread_pointer(thread);)
-
-  OSThread* osthread = thread->osthread();
-
-  if (!osthread->interrupted()) {
-    osthread->set_interrupted(true);
-    // More than one thread can get here with the same value of osthread,
-    // resulting in multiple notifications.  We do, however, want the store
-    // to interrupted() to be visible to other threads before we execute unpark().
-    OrderAccess::fence();
-    ParkEvent * const slp = thread->_SleepEvent ;
-    if (slp != NULL) slp->unpark() ;
-  }
-
-  // For JSR166. Unpark even if interrupt status already was set
-  if (thread->is_Java_thread())
-    ((JavaThread*)thread)->parker()->unpark();
-
-  ParkEvent * ev = thread->_ParkEvent ;
-  if (ev != NULL) ev->unpark() ;
-}
-
-bool os::is_interrupted(Thread* thread, bool clear_interrupted) {
-  debug_only(Thread::check_for_dangling_thread_pointer(thread);)
-
-  OSThread* osthread = thread->osthread();
-
-  bool interrupted = osthread->interrupted();
-
-  // NOTE that since there is no "lock" around the interrupt and
-  // is_interrupted operations, there is the possibility that the
-  // interrupted flag (in osThread) will be "false" but that the
-  // low-level events will be in the signaled state. This is
-  // intentional. The effect of this is that Object.wait() and
-  // LockSupport.park() will appear to have a spurious wakeup, which
-  // is allowed and not harmful, and the possibility is so rare that
-  // it is not worth the added complexity to add yet another lock.
-  // For the sleep event an explicit reset is performed on entry
-  // to os::sleep, so there is no early return. It has also been
-  // recommended not to put the interrupted flag into the "event"
-  // structure because it hides the issue.
-  if (interrupted && clear_interrupted) {
-    osthread->set_interrupted(false);
-    // consider thread->_SleepEvent->reset() ... optional optimization
-  }
-
-  return interrupted;
-}
-
-
 
 static const struct {
   int sig; const char* name;
@@ -813,6 +731,9 @@ static const struct {
 #endif
   {  SIGHUP,      "SIGHUP" },
   {  SIGILL,      "SIGILL" },
+#ifdef SIGINFO
+  {  SIGINFO,     "SIGINFO" },
+#endif
   {  SIGINT,      "SIGINT" },
 #ifdef SIGIO
   {  SIGIO,       "SIGIO" },
@@ -1450,6 +1371,30 @@ char * os::native_path(char *path) {
   return path;
 }
 
+bool os::same_files(const char* file1, const char* file2) {
+  if (strcmp(file1, file2) == 0) {
+    return true;
+  }
+
+  bool is_same = false;
+  struct stat st1;
+  struct stat st2;
+
+  if (os::stat(file1, &st1) < 0) {
+    return false;
+  }
+
+  if (os::stat(file2, &st2) < 0) {
+    return false;
+  }
+
+  if (st1.st_dev == st2.st_dev && st1.st_ino == st2.st_ino) {
+    // same files
+    is_same = true;
+  }
+  return is_same;
+}
+
 // Check minimum allowable stack sizes for thread creation and to initialize
 // the java system classes, including StackOverflowError - depends on page
 // size.
@@ -1671,6 +1616,8 @@ static void pthread_init_common(void) {
   if ((status = pthread_mutexattr_settype(_mutexAttr, PTHREAD_MUTEX_NORMAL)) != 0) {
     fatal("pthread_mutexattr_settype: %s", os::strerror(status));
   }
+  // Solaris has it's own PlatformMutex, distinct from the one for POSIX.
+  NOT_SOLARIS(os::PlatformMutex::init();)
 }
 
 #ifndef SOLARIS
@@ -1886,18 +1833,18 @@ static void unpack_abs_time(timespec* abstime, jlong deadline, jlong now_sec) {
     abstime->tv_nsec = 0;
   } else {
     abstime->tv_sec = seconds;
-    abstime->tv_nsec = millis * (NANOUNITS / MILLIUNITS);
+    abstime->tv_nsec = millis_to_nanos(millis);
   }
 }
 
-static jlong millis_to_nanos(jlong millis) {
+static jlong millis_to_nanos_bounded(jlong millis) {
   // We have to watch for overflow when converting millis to nanos,
   // but if millis is that large then we will end up limiting to
   // MAX_SECS anyway, so just do that here.
   if (millis / MILLIUNITS > MAX_SECS) {
     millis = jlong(MAX_SECS) * MILLIUNITS;
   }
-  return millis * (NANOUNITS / MILLIUNITS);
+  return millis_to_nanos(millis);
 }
 
 static void to_abstime(timespec* abstime, jlong timeout,
@@ -1950,7 +1897,7 @@ static void to_abstime(timespec* abstime, jlong timeout,
 // Create an absolute time 'millis' milliseconds in the future, using the
 // real-time (time-of-day) clock. Used by PosixSemaphore.
 void os::Posix::to_RTC_abstime(timespec* abstime, int64_t millis) {
-  to_abstime(abstime, millis_to_nanos(millis),
+  to_abstime(abstime, millis_to_nanos_bounded(millis),
              false /* not absolute */,
              true  /* use real-time clock */);
 }
@@ -1999,7 +1946,7 @@ void os::PlatformEvent::park() {       // AKA "down()"
   // atomically decrement _event
   for (;;) {
     v = _event;
-    if (Atomic::cmpxchg(v - 1, &_event, v) == v) break;
+    if (Atomic::cmpxchg(&_event, v, v - 1) == v) break;
   }
   guarantee(v >= 0, "invariant");
 
@@ -2039,13 +1986,13 @@ int os::PlatformEvent::park(jlong millis) {
   // atomically decrement _event
   for (;;) {
     v = _event;
-    if (Atomic::cmpxchg(v - 1, &_event, v) == v) break;
+    if (Atomic::cmpxchg(&_event, v, v - 1) == v) break;
   }
   guarantee(v >= 0, "invariant");
 
   if (v == 0) { // Do this the hard way by blocking ...
     struct timespec abst;
-    to_abstime(&abst, millis_to_nanos(millis), false, false);
+    to_abstime(&abst, millis_to_nanos_bounded(millis), false, false);
 
     int ret = OS_TIMEOUT;
     int status = pthread_mutex_lock(_mutex);
@@ -2095,9 +2042,9 @@ void os::PlatformEvent::unpark() {
   // shake out uses of park() and unpark() without checking state conditions
   // properly. This spurious return doesn't manifest itself in any user code
   // but only in the correctly written condition checking loops of ObjectMonitor,
-  // Mutex/Monitor, Thread::muxAcquire and os::sleep
+  // Mutex/Monitor, Thread::muxAcquire and JavaThread::sleep
 
-  if (Atomic::xchg(1, &_event) >= 0) return;
+  if (Atomic::xchg(&_event, 1) >= 0) return;
 
   int status = pthread_mutex_lock(_mutex);
   assert_status(status == 0, status, "mutex_lock");
@@ -2145,7 +2092,7 @@ void Parker::park(bool isAbsolute, jlong time) {
   // Return immediately if a permit is available.
   // We depend on Atomic::xchg() having full barrier semantics
   // since we are doing a lock-free update to _counter.
-  if (Atomic::xchg(0, &_counter) > 0) return;
+  if (Atomic::xchg(&_counter, 0) > 0) return;
 
   Thread* thread = Thread::current();
   assert(thread->is_Java_thread(), "Must be JavaThread");
@@ -2153,7 +2100,7 @@ void Parker::park(bool isAbsolute, jlong time) {
 
   // Optional optimization -- avoid state transitions if there's
   // an interrupt pending.
-  if (Thread::is_interrupted(thread, false)) {
+  if (jt->is_interrupted(false)) {
     return;
   }
 
@@ -2174,10 +2121,12 @@ void Parker::park(bool isAbsolute, jlong time) {
   // the ThreadBlockInVM() CTOR and DTOR may grab Threads_lock.
   ThreadBlockInVM tbivm(jt);
 
+  // Can't access interrupt state now that we are _thread_blocked. If we've
+  // been interrupted since we checked above then _counter will be > 0.
+
   // Don't wait if cannot get lock since interference arises from
-  // unparking. Also re-check interrupt before trying wait.
-  if (Thread::is_interrupted(thread, false) ||
-      pthread_mutex_trylock(_mutex) != 0) {
+  // unparking.
+  if (pthread_mutex_trylock(_mutex) != 0) {
     return;
   }
 
@@ -2248,21 +2197,115 @@ void Parker::unpark() {
   }
 }
 
-// Platform Monitor implementation
+// Platform Mutex/Monitor implementation
+
+#if PLATFORM_MONITOR_IMPL_INDIRECT
+
+os::PlatformMutex::Mutex::Mutex() : _next(NULL) {
+  int status = pthread_mutex_init(&_mutex, _mutexAttr);
+  assert_status(status == 0, status, "mutex_init");
+}
+
+os::PlatformMutex::Mutex::~Mutex() {
+  int status = pthread_mutex_destroy(&_mutex);
+  assert_status(status == 0, status, "mutex_destroy");
+}
+
+pthread_mutex_t os::PlatformMutex::_freelist_lock;
+os::PlatformMutex::Mutex* os::PlatformMutex::_mutex_freelist = NULL;
+
+void os::PlatformMutex::init() {
+  int status = pthread_mutex_init(&_freelist_lock, _mutexAttr);
+  assert_status(status == 0, status, "freelist lock init");
+}
+
+struct os::PlatformMutex::WithFreeListLocked : public StackObj {
+  WithFreeListLocked() {
+    int status = pthread_mutex_lock(&_freelist_lock);
+    assert_status(status == 0, status, "freelist lock");
+  }
+
+  ~WithFreeListLocked() {
+    int status = pthread_mutex_unlock(&_freelist_lock);
+    assert_status(status == 0, status, "freelist unlock");
+  }
+};
+
+os::PlatformMutex::PlatformMutex() {
+  {
+    WithFreeListLocked wfl;
+    _impl = _mutex_freelist;
+    if (_impl != NULL) {
+      _mutex_freelist = _impl->_next;
+      _impl->_next = NULL;
+      return;
+    }
+  }
+  _impl = new Mutex();
+}
+
+os::PlatformMutex::~PlatformMutex() {
+  WithFreeListLocked wfl;
+  assert(_impl->_next == NULL, "invariant");
+  _impl->_next = _mutex_freelist;
+  _mutex_freelist = _impl;
+}
+
+os::PlatformMonitor::Cond::Cond() : _next(NULL) {
+  int status = pthread_cond_init(&_cond, _condAttr);
+  assert_status(status == 0, status, "cond_init");
+}
+
+os::PlatformMonitor::Cond::~Cond() {
+  int status = pthread_cond_destroy(&_cond);
+  assert_status(status == 0, status, "cond_destroy");
+}
+
+os::PlatformMonitor::Cond* os::PlatformMonitor::_cond_freelist = NULL;
+
+os::PlatformMonitor::PlatformMonitor() {
+  {
+    WithFreeListLocked wfl;
+    _impl = _cond_freelist;
+    if (_impl != NULL) {
+      _cond_freelist = _impl->_next;
+      _impl->_next = NULL;
+      return;
+    }
+  }
+  _impl = new Cond();
+}
+
+os::PlatformMonitor::~PlatformMonitor() {
+  WithFreeListLocked wfl;
+  assert(_impl->_next == NULL, "invariant");
+  _impl->_next = _cond_freelist;
+  _cond_freelist = _impl;
+}
+
+#else
+
+os::PlatformMutex::PlatformMutex() {
+  int status = pthread_mutex_init(&_mutex, _mutexAttr);
+  assert_status(status == 0, status, "mutex_init");
+}
+
+os::PlatformMutex::~PlatformMutex() {
+  int status = pthread_mutex_destroy(&_mutex);
+  assert_status(status == 0, status, "mutex_destroy");
+}
 
 os::PlatformMonitor::PlatformMonitor() {
   int status = pthread_cond_init(&_cond, _condAttr);
   assert_status(status == 0, status, "cond_init");
-  status = pthread_mutex_init(&_mutex, _mutexAttr);
-  assert_status(status == 0, status, "mutex_init");
 }
 
 os::PlatformMonitor::~PlatformMonitor() {
   int status = pthread_cond_destroy(&_cond);
   assert_status(status == 0, status, "cond_destroy");
-  status = pthread_mutex_destroy(&_mutex);
-  assert_status(status == 0, status, "mutex_destroy");
 }
+
+#endif // PLATFORM_MONITOR_IMPL_INDIRECT
 
 // Must already be locked
 int os::PlatformMonitor::wait(jlong millis) {
@@ -2275,10 +2318,10 @@ int os::PlatformMonitor::wait(jlong millis) {
     if (millis / MILLIUNITS > MAX_SECS) {
       millis = jlong(MAX_SECS) * MILLIUNITS;
     }
-    to_abstime(&abst, millis * (NANOUNITS / MILLIUNITS), false, false);
+    to_abstime(&abst, millis_to_nanos(millis), false, false);
 
     int ret = OS_TIMEOUT;
-    int status = pthread_cond_timedwait(&_cond, &_mutex, &abst);
+    int status = pthread_cond_timedwait(cond(), mutex(), &abst);
     assert_status(status == 0 || status == ETIMEDOUT,
                   status, "cond_timedwait");
     if (status == 0) {
@@ -2286,7 +2329,7 @@ int os::PlatformMonitor::wait(jlong millis) {
     }
     return ret;
   } else {
-    int status = pthread_cond_wait(&_cond, &_mutex);
+    int status = pthread_cond_wait(cond(), mutex());
     assert_status(status == 0, status, "cond_wait");
     return OS_OK;
   }

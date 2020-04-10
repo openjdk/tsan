@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1997, 2018, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 1997, 2020, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -25,7 +25,8 @@
 #include "precompiled.hpp"
 #include "interpreter/interpreter.hpp"
 #include "memory/resourceArea.hpp"
-#include "oops/markOop.hpp"
+#include "memory/universe.hpp"
+#include "oops/markWord.hpp"
 #include "oops/method.hpp"
 #include "oops/oop.inline.hpp"
 #include "prims/methodHandles.hpp"
@@ -56,16 +57,8 @@ bool frame::safe_for_sender(JavaThread *thread) {
   address   unextended_sp = (address)_unextended_sp;
 
   // consider stack guards when trying to determine "safe" stack pointers
-  static size_t stack_guard_size = os::uses_stack_guard_pages() ?
-    JavaThread::stack_red_zone_size() + JavaThread::stack_yellow_zone_size() : 0;
-  size_t usable_stack_size = thread->stack_size() - stack_guard_size;
-
   // sp must be within the usable part of the stack (not in guards)
-  bool sp_safe = (sp < thread->stack_base()) &&
-                 (sp >= thread->stack_base() - usable_stack_size);
-
-
-  if (!sp_safe) {
+  if (!thread->is_in_usable_stack(sp)) {
     return false;
   }
 
@@ -546,13 +539,13 @@ bool frame::is_interpreted_frame_valid(JavaThread* thread) const {
 
   // validate ConstantPoolCache*
   ConstantPoolCache* cp = *interpreter_frame_cache_addr();
-  if (cp == NULL || !cp->is_metaspace_object()) return false;
+  if (MetaspaceObj::is_valid(cp) == false) return false;
 
   // validate locals
 
   address locals =  (address) *interpreter_frame_locals_addr();
 
-  if (locals > thread->stack_base() || locals < (address) fp()) return false;
+  if (locals >= thread->stack_base() || locals < (address) fp()) return false;
 
   // We'd have to be pretty unlucky to be mislead at this point
   return true;

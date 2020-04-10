@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998, 2019, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 1998, 2020, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -25,8 +25,12 @@
 
 package jdk.javadoc.internal.doclets.formats.html;
 
-import java.util.*;
+import java.util.Set;
+import java.util.TreeSet;
 
+import jdk.javadoc.internal.doclets.formats.html.markup.BodyContents;
+import jdk.javadoc.internal.doclets.formats.html.markup.ContentBuilder;
+import jdk.javadoc.internal.doclets.formats.html.markup.Entity;
 import jdk.javadoc.internal.doclets.formats.html.markup.HtmlStyle;
 import jdk.javadoc.internal.doclets.formats.html.markup.HtmlTag;
 import jdk.javadoc.internal.doclets.formats.html.markup.HtmlTree;
@@ -49,8 +53,6 @@ import jdk.javadoc.internal.doclets.toolkit.util.IndexBuilder;
  *  deletion without notice.</b>
  *
  * @see java.lang.Character
- * @author Atul M Dambalkar
- * @author Bhavesh Patel (Modified)
  */
 public class SingleIndexWriter extends AbstractIndexWriter {
 
@@ -62,26 +64,26 @@ public class SingleIndexWriter extends AbstractIndexWriter {
      *
      * @param configuration the configuration for this doclet
      * @param filename     Name of the index file to be generated.
-     * @param indexbuilder Unicode based Index from {@link IndexBuilder}
+     * @param indexBuilder Unicode based Index from {@link IndexBuilder}
      */
     public SingleIndexWriter(HtmlConfiguration configuration,
                              DocPath filename,
-                             IndexBuilder indexbuilder) {
-        super(configuration, filename, indexbuilder);
+                             IndexBuilder indexBuilder) {
+        super(configuration, filename, indexBuilder);
     }
 
     /**
      * Generate single index file, for all Unicode characters.
      *
      * @param configuration the configuration for this doclet
-     * @param indexbuilder IndexBuilder built by {@link IndexBuilder}
+     * @param indexBuilder IndexBuilder built by {@link IndexBuilder}
      * @throws DocFileIOException if there is a problem generating the index
      */
     public static void generate(HtmlConfiguration configuration,
-                                IndexBuilder indexbuilder) throws DocFileIOException {
+                                IndexBuilder indexBuilder) throws DocFileIOException {
         DocPath filename = DocPaths.INDEX_ALL;
         SingleIndexWriter indexgen = new SingleIndexWriter(configuration,
-                                         filename, indexbuilder);
+                                         filename, indexBuilder);
         indexgen.generateIndexFile();
     }
 
@@ -92,39 +94,39 @@ public class SingleIndexWriter extends AbstractIndexWriter {
      */
     protected void generateIndexFile() throws DocFileIOException {
         String title = resources.getText("doclet.Window_Single_Index");
-        HtmlTree body = getBody(true, getWindowTitle(title));
-        HtmlTree header = HtmlTree.HEADER();
-        addTop(header);
+        HtmlTree body = getBody(getWindowTitle(title));
+        Content headerContent = new ContentBuilder();
+        addTop(headerContent);
         navBar.setUserHeader(getUserHeaderFooter(true));
-        header.add(navBar.getContent(true));
-        body.add(header);
-        HtmlTree main = HtmlTree.MAIN();
-        main.add(HtmlTree.DIV(HtmlStyle.header,
-                HtmlTree.HEADING(Headings.PAGE_TITLE_HEADING,
-                        contents.getContent("doclet.Index"))));
+        headerContent.add(navBar.getContent(true));
         HtmlTree divTree = new HtmlTree(HtmlTag.DIV);
         divTree.setStyle(HtmlStyle.contentContainer);
-        elements = new TreeSet<>(indexbuilder.getIndexMap().keySet());
+        elements = new TreeSet<>(indexBuilder.asMap().keySet());
         elements.addAll(configuration.tagSearchIndexKeys);
         addLinksForIndexes(divTree);
         for (Character unicode : elements) {
             if (configuration.tagSearchIndexMap.get(unicode) == null) {
-                addContents(unicode, indexbuilder.getMemberList(unicode), divTree);
-            } else if (indexbuilder.getMemberList(unicode) == null) {
+                addContents(unicode, indexBuilder.getMemberList(unicode), divTree);
+            } else if (indexBuilder.getMemberList(unicode) == null) {
                 addSearchContents(unicode, configuration.tagSearchIndexMap.get(unicode), divTree);
             } else {
-                addContents(unicode, indexbuilder.getMemberList(unicode),
-                        configuration.tagSearchIndexMap.get(unicode), divTree);
+                addContents(unicode, indexBuilder.getMemberList(unicode),
+                            configuration.tagSearchIndexMap.get(unicode), divTree);
             }
         }
         addLinksForIndexes(divTree);
-        main.add(divTree);
-        body.add(main);
         HtmlTree footer = HtmlTree.FOOTER();
         navBar.setUserFooter(getUserHeaderFooter(false));
         footer.add(navBar.getContent(false));
         addBottom(footer);
-        body.add(footer);
+        body.add(new BodyContents()
+                .setHeader(headerContent)
+                .addMainContent(HtmlTree.DIV(HtmlStyle.header,
+                        HtmlTree.HEADING(Headings.PAGE_TITLE_HEADING,
+                                contents.getContent("doclet.Index"))))
+                .addMainContent(divTree)
+                .setFooter(footer)
+                .toContent());
         createSearchIndexFiles();
         printHtmlDocument(null, "index", body);
     }
@@ -140,15 +142,19 @@ public class SingleIndexWriter extends AbstractIndexWriter {
             contentTree.add(
                     links.createLink(getNameForIndex(unicode),
                             new StringContent(unicode)));
-            contentTree.add(Contents.SPACE);
+            contentTree.add(Entity.NO_BREAK_SPACE);
         }
         contentTree.add(new HtmlTree(HtmlTag.BR));
         contentTree.add(links.createLink(DocPaths.ALLCLASSES_INDEX,
                 contents.allClassesLabel));
         if (!configuration.packages.isEmpty()) {
-            contentTree.add(Contents.SPACE);
+            contentTree.add(getVerticalSeparator());
             contentTree.add(links.createLink(DocPaths.ALLPACKAGES_INDEX,
                     contents.allPackagesLabel));
+        }
+        if (!configuration.tagSearchIndex.isEmpty()) {
+            contentTree.add(getVerticalSeparator());
+            contentTree.add(links.createLink(DocPaths.SYSTEM_PROPERTIES, contents.systemPropertiesLabel));
+        }
     }
-}
 }

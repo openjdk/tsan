@@ -27,17 +27,11 @@ package sun.security.ssl;
 
 import java.security.*;
 import java.util.*;
-import sun.security.rsa.SunRsaSignEntries;
 import static sun.security.util.SecurityConstants.PROVIDER_VER;
 import static sun.security.provider.SunEntries.createAliases;
 
 /**
  * The JSSE provider.
- *
- * The RSA implementation has been removed from JSSE, but we still need to
- * register the same algorithms for compatibility. We just point to the RSA
- * implementation in the SunRsaSign provider. This works because all classes
- * are in the bootclasspath and therefore loaded by the same classloader.
  *
  * SunJSSE now supports an experimental FIPS compliant mode when used with an
  * appropriate FIPS certified crypto provider. In FIPS mode, we:
@@ -60,6 +54,7 @@ import static sun.security.provider.SunEntries.createAliases;
  */
 public class SunJSSE extends java.security.Provider {
 
+    @java.io.Serial
     private static final long serialVersionUID = 3231825739635378733L;
 
     private static String info = "Sun JSSE provider" +
@@ -84,12 +79,6 @@ public class SunJSSE extends java.security.Provider {
     }
 
     private void doRegister() {
-        Iterator<Provider.Service> rsaIter =
-            new SunRsaSignEntries(this).iterator();
-        while (rsaIter.hasNext()) {
-            putService(rsaIter.next());
-        }
-
         ps("Signature", "MD5andSHA1withRSA",
             "sun.security.ssl.RSASignature", null, null);
 

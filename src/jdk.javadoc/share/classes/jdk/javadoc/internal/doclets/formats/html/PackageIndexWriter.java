@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1997, 2019, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 1997, 2020, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -33,7 +33,6 @@ import javax.lang.model.element.PackageElement;
 
 import jdk.javadoc.internal.doclets.formats.html.markup.ContentBuilder;
 import jdk.javadoc.internal.doclets.formats.html.markup.HtmlStyle;
-import jdk.javadoc.internal.doclets.formats.html.markup.HtmlTag;
 import jdk.javadoc.internal.doclets.formats.html.markup.HtmlTree;
 import jdk.javadoc.internal.doclets.toolkit.Content;
 import jdk.javadoc.internal.doclets.toolkit.util.DocFileIOException;
@@ -42,19 +41,19 @@ import jdk.javadoc.internal.doclets.toolkit.util.DocPaths;
 import jdk.javadoc.internal.doclets.toolkit.util.Group;
 
 /**
- * Generate the package index page "overview-summary.html" for the right-hand
- * frame. A click on the package name on this page will update the same frame
- * with the "package-summary.html" file for the clicked package.
+ * Generate the package index page "index.html".
  *
  *  <p><b>This is NOT part of any supported API.
  *  If you write code that depends on this, you do so at your own risk.
  *  This code and its internal interfaces are subject to change or
  *  deletion without notice.</b>
- *
- * @author Atul M Dambalkar
- * @author Bhavesh Patel (Modified)
  */
-public class PackageIndexWriter extends AbstractPackageIndexWriter {
+public class PackageIndexWriter extends AbstractOverviewIndexWriter {
+
+    /**
+     * A Set of Packages to be documented.
+     */
+    protected SortedSet<PackageElement> packages;
 
     /**
      * Construct the PackageIndexWriter. Also constructs the grouping
@@ -67,37 +66,28 @@ public class PackageIndexWriter extends AbstractPackageIndexWriter {
      */
     public PackageIndexWriter(HtmlConfiguration configuration, DocPath filename) {
         super(configuration, filename);
+        packages = configuration.packages;
     }
 
     /**
-     * Generate the package index page for the right-hand frame.
+     * Generate the package index page.
      *
      * @param configuration the current configuration of the doclet.
      * @throws DocFileIOException if there is a problem generating the package index page
      */
     public static void generate(HtmlConfiguration configuration) throws DocFileIOException {
-        DocPath filename = DocPaths.overviewSummary(configuration.frames);
+        DocPath filename = DocPaths.INDEX;
         PackageIndexWriter packgen = new PackageIndexWriter(configuration, filename);
-        packgen.buildPackageIndexFile("doclet.Window_Overview_Summary", "package index", true);
+        packgen.buildOverviewIndexFile("doclet.Window_Overview_Summary", "package index");
     }
 
     /**
-     * Depending upon the grouping information and their titles, add
-     * separate table indices for each package group.
+     * Adds the packages list to the documentation tree.
      *
-     * @param header the documentation tree to which the navigational links will be added
      * @param main the documentation tree to which the packages list will be added
      */
     @Override
-    protected void addIndex(Content header, Content main) {
-        addIndexContents(header, main);
-    }
-
-    /**
-     * {@inheritDoc}
-     */
-    @Override
-    protected void addPackagesList(Content main) {
+    protected void addIndex(Content main) {
         Map<String, SortedSet<PackageElement>> groupPackageMap
                 = configuration.group.groupPackages(packages);
 
@@ -119,7 +109,7 @@ public class PackageIndexWriter extends AbstractPackageIndexWriter {
 
             for (PackageElement pkg : configuration.packages) {
                 if (!pkg.isUnnamed()) {
-                    if (!(configuration.nodeprecated && utils.isDeprecated(pkg))) {
+                    if (!(options.noDeprecated() && utils.isDeprecated(pkg))) {
                         Content packageLinkContent = getPackageLink(pkg, getPackageName(pkg));
                         Content summaryContent = new ContentBuilder();
                         addSummaryComment(pkg, summaryContent);
@@ -135,63 +125,5 @@ public class PackageIndexWriter extends AbstractPackageIndexWriter {
                 getMainBodyScript().append(table.getScript());
             }
         }
-    }
-
-    /**
-     * Adds the overview summary comment for this documentation. Add one line
-     * summary at the top of the page and generate a link to the description,
-     * which is added at the end of this page.
-     *
-     * @param main the documentation tree to which the overview header will be added
-     */
-    @Override
-    protected void addOverviewHeader(Content main) {
-        addConfigurationTitle(main);
-        if (!utils.getFullBody(configuration.overviewElement).isEmpty()) {
-            HtmlTree div = new HtmlTree(HtmlTag.DIV);
-            div.setStyle(HtmlStyle.contentContainer);
-            addOverviewComment(div);
-            main.add(div);
-        }
-    }
-
-    /**
-     * Adds the overview comment as provided in the file specified by the
-     * "-overview" option on the command line.
-     *
-     * @param htmltree the documentation tree to which the overview comment will
-     *                 be added
-     */
-    protected void addOverviewComment(Content htmltree) {
-        if (!utils.getFullBody(configuration.overviewElement).isEmpty()) {
-            addInlineComment(configuration.overviewElement, htmltree);
-        }
-    }
-
-    /**
-     * Adds the top text (from the -top option), the upper
-     * navigation bar, and then the title (from the"-title"
-     * option), at the top of page.
-     *
-     * @param header the documentation tree to which the navigation bar header will be added
-     */
-    @Override
-    protected void addNavigationBarHeader(Content header) {
-        addTop(header);
-        navBar.setUserHeader(getUserHeaderFooter(true));
-        header.add(navBar.getContent(true));
-    }
-
-    /**
-     * Adds the lower navigation bar and the bottom text
-     * (from the -bottom option) at the bottom of page.
-     *
-     * @param footer the documentation tree to which the navigation bar footer will be added
-     */
-    @Override
-    protected void addNavigationBarFooter(Content footer) {
-        navBar.setUserFooter(getUserHeaderFooter(false));
-        footer.add(navBar.getContent(false));
-        addBottom(footer);
     }
 }

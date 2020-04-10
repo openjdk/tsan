@@ -39,8 +39,6 @@ import jdk.javadoc.internal.doclets.toolkit.Content;
  *  If you write code that depends on this, you do so at your own risk.
  *  This code and its internal interfaces are subject to change or
  *  deletion without notice.</b>
- *
- *  @author Jamie Ho
  */
 public abstract class LinkInfo {
 
@@ -70,12 +68,6 @@ public abstract class LinkInfo {
      * Set this to true to indicate that you are linking to a type parameter.
      */
     public boolean isTypeBound = false;
-
-    /**
-     * Whether the document element is in a Java 5 declaration
-     * location or not.
-     */
-    public boolean isJava5DeclarationLocation = true;
 
     /**
      * The label for the link.
@@ -161,7 +153,6 @@ public abstract class LinkInfo {
                 ", type=" + type +
                 ", isVarArg=" + isVarArg +
                 ", isTypeBound=" + isTypeBound +
-                ", isJava5DeclarationLocation=" + isJava5DeclarationLocation +
                 ", label=" + label +
                 ", isStrong=" + isStrong +
                 ", includeTypeInClassLinkLabel=" + includeTypeInClassLinkLabel +
