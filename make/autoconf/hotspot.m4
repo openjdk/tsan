@@ -555,7 +555,7 @@ AC_DEFUN_ONCE([HOTSPOT_SETUP_JVM_FEATURES],
     AC_MSG_RESULT([no, forced])
     INCLUDE_TSAN="false"
   # Only enable ThreadSanitizer on supported platforms
-  elif test "x$OPENJDK_TARGET_OS" = "xlinux" && test "x$OPENJDK_TARGET_CPU" = "xx86_64"; then
+  elif test "x$OPENJDK_TARGET_OS" = "xlinux" && (test "x$OPENJDK_TARGET_CPU" = "xx86_64" || test "x$OPENJDK_TARGET_CPU" = "xaarch64"); then
     AC_MSG_RESULT([yes])
     NON_MINIMAL_FEATURES="$NON_MINIMAL_FEATURES tsan"
     INCLUDE_TSAN="true"

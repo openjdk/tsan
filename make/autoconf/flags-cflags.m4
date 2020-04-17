@@ -298,7 +298,9 @@ AC_DEFUN([FLAGS_SETUP_OPTIMIZATION],
       C_O_FLAG_NONE="${C_O_FLAG_NONE} ${DISABLE_FORTIFY_CFLAGS}"
     fi
   elif test "x$TOOLCHAIN_TYPE" = xclang; then
-    if test "x$OPENJDK_TARGET_OS" = xmacosx; then
+    # Use -Os on aarch64 to work around known llvm issue,
+    # (see https://bugs.llvm.org/show_bug.cgi?id=44581) which makes release build crash in aarch64.
+    if test "x$OPENJDK_TARGET_OS" = xmacosx || test "x$OPENJDK_TARGET_CPU" = xaarch64; then
       # On MacOSX we optimize for size, something
       # we should do for all platforms?
       C_O_FLAG_HIGHEST_JVM="-Os"
@@ -565,6 +567,12 @@ AC_DEFUN([FLAGS_SETUP_CFLAGS_HELPER],
       fi
       TOOLCHAIN_CFLAGS_JDK="-pipe"
       TOOLCHAIN_CFLAGS_JDK_CONLY="-fno-strict-aliasing" # technically NOT for CXX
+    fi
+
+    # Disable experimental isel due to a known issue in llvm-8, which generates wrong debug info.
+    # (see https://bugs.llvm.org/show_bug.cgi?id=40887)
+    if test "x$OPENJDK_TARGET_CPU" = xaarch64; then
+      TOOLCHAIN_CFLAGS_JVM="$TOOLCHAIN_CFLAGS_JVM -fno-experimental-isel"
     fi
   elif test "x$TOOLCHAIN_TYPE" = xsolstudio; then
     TOOLCHAIN_FLAGS="-errtags -errfmt"
