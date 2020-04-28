@@ -537,6 +537,29 @@ bool os::has_allocatable_memory_limit(julong* limit) {
     *limit = (julong)rlim.rlim_cur;
     result = true;
   }
+
+#if (INCLUDE_TSAN) && defined(AARCH64)
+  // Current TSAN memory mapping for 48bits aarch64, a large continuous space could be allocated between
+  // kMidAppMemBeg = 0x0aaaa00000000ull and kMidAppMemEnd = 0x0aaaf00000000ull, which is only 20GB size.
+  // Take 16GB here for safer allocation.
+  const julong max_avail_vmspace = 16ULL * G; // 16GB
+  const u8 msb_in_aarch64 = 47; // Only support 48-bits space now.
+
+  // Based on tsan memory mapping for 48bits aarch64,
+  // libjvm.so will be loaded between kHiAppMemBeg = 0x0ffff00000000ull and kHiAppMemEnd = 0x1000000000000ull
+  u8 vm_addr_u8 = reinterpret_cast<u8>(&__FUNCTION__);
+  // High address in 48bits user space is like 0x0000ffffxxxxxxxx.
+  assert((vm_addr_u8  >> msb_in_aarch64) == 0x1, "warning: allocation could fail in non 48-bit address space.");
+
+  if (result) {
+    *limit = MIN2(*limit, max_avail_vmspace);
+  } else {
+    *limit = max_avail_vmspace;
+  }
+
+  result = true;
+#endif
+
 #ifdef _LP64
   return result;
 #else
