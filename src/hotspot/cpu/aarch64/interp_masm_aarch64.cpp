@@ -1509,6 +1509,10 @@ void InterpreterMacroAssembler::notify_method_entry() {
                  rthread, c_rarg1);
   }
 
+  TSAN_RUNTIME_ONLY(call_VM(noreg,
+                            CAST_FROM_FN_PTR(address,
+                            SharedRuntime::tsan_interp_method_entry)));
+
   // RedefineClasses() tracing support for obsolete method entry
   if (log_is_enabled(Trace, redefine, class, obsolete)) {
     get_method(c_rarg1);
@@ -1541,6 +1545,13 @@ void InterpreterMacroAssembler::notify_method_exit(
     bind(L);
     pop(state);
   }
+
+  TSAN_RUNTIME_ONLY(
+    push(state);
+    call_VM_leaf(CAST_FROM_FN_PTR(address,
+                 SharedRuntime::tsan_interp_method_exit));
+    pop(state);
+  );
 
   {
     SkipIfEqual skip(this, &DTraceMethodProbes, false);
