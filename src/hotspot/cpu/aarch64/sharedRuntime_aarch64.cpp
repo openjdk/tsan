@@ -1701,6 +1701,15 @@ nmethod* SharedRuntime::generate_native_wrapper(MacroAssembler* masm,
     __ bind(dtrace_method_entry_done);
   }
 
+  TSAN_RUNTIME_ONLY(
+    // protect the args we've loaded
+    save_args(masm, total_c_args, c_arg, out_regs);
+    __ call_VM(noreg,
+      CAST_FROM_FN_PTR(address, SharedRuntime::tsan_interp_method_entry),
+      rthread);
+    restore_args(masm, total_c_args, c_arg, out_regs);
+  );
+
   // RedefineClasses() tracing support for obsolete method entry
   if (log_is_enabled(Trace, redefine, class, obsolete)) {
     // protect the args we've loaded
@@ -1931,6 +1940,13 @@ nmethod* SharedRuntime::generate_native_wrapper(MacroAssembler* masm,
 
     __ bind(done);
   }
+
+  TSAN_RUNTIME_ONLY(
+    save_native_result(masm, ret_type, stack_slots);
+    __ call_VM_leaf(
+         CAST_FROM_FN_PTR(address, SharedRuntime::tsan_interp_method_exit));
+    restore_native_result(masm, ret_type, stack_slots);
+  );
 
   Label dtrace_method_exit, dtrace_method_exit_done;
   {
