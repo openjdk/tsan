@@ -860,6 +860,15 @@ define SetupRunJtregTestBody
     $1_JTREG_LAUNCHER_OPTIONS += -Xmx$$($1_JTREG_MAX_MEM)
   endif
 
+  # With tsan enabled, process reaper often causes SOE. it makes jtreg test failure.
+  ifeq ($(INCLUDE_TSAN), true)
+    ifeq ($(call isTargetCpuArch, aarch64), true)
+      $1_JTREG_BASIC_OPTIONS += -vmoption:-Djdk.lang.processReaperUseDefaultStackSize=true
+      $1_JTREG_LAUNCHER_OPTIONS += -Djdk.lang.processReaperUseDefaultStackSize=true
+      $$(info tsan enabled, process reaper will use default JVM stack size.)
+    endif
+  endif
+
   $1_JTREG_BASIC_OPTIONS += -$$($1_JTREG_TEST_MODE) \
       -verbose:$$(JTREG_VERBOSE) -retain:$$(JTREG_RETAIN) \
       -concurrency:$$($1_JTREG_JOBS) -timeoutFactor:$$(JTREG_TIMEOUT_FACTOR) \
