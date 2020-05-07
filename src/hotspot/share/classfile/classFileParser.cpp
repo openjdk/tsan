@@ -5848,7 +5848,10 @@ void ClassFileParser::fill_instance_klass(InstanceKlass* ik, bool changed_by_loa
 #ifdef ASSERT
       u8 id_u8 = reinterpret_cast<u8>(id);
       assert((id_u8 & right_n_bits(3)) == 0, "jmethodID is not aligned");
-      assert((id_u8 & left_n_bits(17)) == 0, "jmethodID is not aligned");
+      AMD64_ONLY(assert((id_u8 & left_n_bits(17)) == 0, "jmethodID is not aligned");)
+      AARCH64_ONLY(id_u8 >>= 36;
+                   assert(id_u8 == 0 || id_u8 == 0xaaa || id_u8 == 0xfff, "jmethodID is not aligned");
+                   )
 #endif
     }
   }
