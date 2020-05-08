@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1997, 2019, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 1997, 2020, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -305,8 +305,22 @@ class SharedRuntime: AllStatic {
       (((u8)(jmethod_id_ptr)) << tsan_method_id_shift) | bci);
   }
   static jmethodID tsan_method_id_from_code_location(u8 loc) {
-    return (jmethodID)(
-        (loc & ~(tsan_fake_pc_bit | tsan_bci_mask)) >> tsan_method_id_shift);
+    u8 id =
+        (loc & ~(tsan_fake_pc_bit | tsan_bci_mask)) >> tsan_method_id_shift;
+
+    // Typical method ID in aarch64 is like 0xffff_xxxx_xxxx_xxxx, which couldn't be represented by 47-bits.
+    // But there are only 3 application memory regions in tsan for 48bits aarch64, the highest 4 bits
+    // of addresses are 0x0, 0xa and 0xf respectively. The encoding function tsan_code_location() will
+    // overwrite bit 47 for internal purpose, Therefore, we restore bit 47 here according to
+    // the value of bits 46:44. if it is 0x2 or 0x7, restore bit 47 to 1.
+#ifdef AARCH64
+    u8 highest4bits = id >> 44;
+    if (highest4bits == 0x7ULL || highest4bits == 0x2ULL) {
+      id |= (0x1ULL << 47);
+    }
+#endif
+
+    return (jmethodID)id;
   }
   static u2 tsan_bci_from_code_location(u8 loc) {
     return (u2)(loc & tsan_bci_mask);
