@@ -705,6 +705,9 @@ void InterpreterMacroAssembler::remove_activation(
 void InterpreterMacroAssembler::lock_object(Register lock_reg)
 {
   assert(lock_reg == c_rarg1, "The argument is only for looks. It must be c_rarg1");
+
+  TSAN_RUNTIME_ONLY(push_ptr(lock_reg));
+
   if (UseHeavyMonitors) {
     call_VM(noreg,
             CAST_FROM_FN_PTR(address, InterpreterRuntime::monitorenter),
@@ -787,6 +790,15 @@ void InterpreterMacroAssembler::lock_object(Register lock_reg)
 
     bind(done);
   }
+
+  TSAN_RUNTIME_ONLY(
+    pop_ptr(lock_reg);
+    pusha();
+    call_VM(noreg,
+            CAST_FROM_FN_PTR(address, SharedRuntime::tsan_interp_lock),
+            lock_reg);
+    popa();
+  );
 }
 
 
@@ -804,6 +816,14 @@ void InterpreterMacroAssembler::lock_object(Register lock_reg)
 void InterpreterMacroAssembler::unlock_object(Register lock_reg)
 {
   assert(lock_reg == c_rarg1, "The argument is only for looks. It must be rarg1");
+
+  TSAN_RUNTIME_ONLY(
+    pusha();
+    call_VM(noreg,
+            CAST_FROM_FN_PTR(address, SharedRuntime::tsan_interp_unlock),
+            lock_reg);
+    popa();
+  );
 
   if (UseHeavyMonitors) {
     call_VM(noreg,

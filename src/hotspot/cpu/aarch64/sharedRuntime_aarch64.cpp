@@ -1789,6 +1789,14 @@ nmethod* SharedRuntime::generate_native_wrapper(MacroAssembler* masm,
     // Slow path will re-enter here
 
     __ bind(lock_done);
+
+    TSAN_RUNTIME_ONLY(
+      __ pusha();
+      __ call_VM(noreg,
+                 CAST_FROM_FN_PTR(address, SharedRuntime::tsan_oop_lock),
+                 obj_reg);
+      __ popa();
+    );
   }
 
 
@@ -1904,6 +1912,15 @@ nmethod* SharedRuntime::generate_native_wrapper(MacroAssembler* masm,
     __ ldr(obj_reg, Address(oop_handle_reg, 0));
 
     __ resolve(IS_NOT_NULL, obj_reg);
+
+    TSAN_RUNTIME_ONLY(
+      __ pusha();
+      __ call_VM(noreg,
+                 CAST_FROM_FN_PTR(address, SharedRuntime::tsan_oop_unlock),
+                 obj_reg);
+      __ popa();
+    );
+
 
     Label done;
 
