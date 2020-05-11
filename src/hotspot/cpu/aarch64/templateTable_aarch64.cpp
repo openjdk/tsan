@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2003, 2019, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2003, 2020, Oracle and/or its affiliates. All rights reserved.
  * Copyright (c) 2014, Red Hat Inc. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
@@ -752,6 +752,68 @@ void TemplateTable::index_check(Register array, Register index)
   __ br(rscratch1);
   __ bind(ok);
 }
+
+#if INCLUDE_TSAN
+
+void TemplateTable::tsan_observe_get_or_put(const Address &field,
+                                            Register flags,
+                                            TsanMemoryReadWriteFunction tsan_function,
+                                            TosState tos) {
+  assert(ThreadSanitizer, "ThreadSanitizer should be set");
+
+  TsanMemoryReleaseAcquireFunction releaseAcquireFunction =
+      tsan_release_acquire_method(tsan_function);
+
+  Label done, notAcquireRelease;
+
+  // We could save some instructions by only saving the registers we need.
+  __ pusha();
+  // pusha() doesn't save v0, which tsan_function clobbers and the
+  // interpreter still needs.
+  // This really only needs to be done for some of the float/double accesses,
+  // but it's here because it's cleaner.
+  __ push_d(v0);
+  // For volatile reads/writes use an acquire/release.
+  // If a reference is annotated to be ignored, assume it's safe to
+  // access the object it's referring to and create a happens-before relation
+  // between the accesses to this reference.
+  if (tos == atos) {
+    int32_t acquire_release_mask = 1 << ConstantPoolCacheEntry::is_volatile_shift |
+      1 << ConstantPoolCacheEntry::is_tsan_ignore_shift;
+    __ mov(rscratch1, acquire_release_mask);
+    __ tst(flags, rscratch1);
+    __ br(Assembler::EQ, notAcquireRelease);
+  } else {
+    __ tbz(flags, ConstantPoolCacheEntry::is_volatile_shift, notAcquireRelease);
+  }
+
+  __ lea(c_rarg0, field);
+  __ call_VM_leaf(CAST_FROM_FN_PTR(address, releaseAcquireFunction), c_rarg0);
+  if (ThreadSanitizerJavaMemory) {
+    __ b(done);
+    __ bind(notAcquireRelease);
+
+    // Ignore reads/writes to final fields. They can't be racy.
+    __ tbnz(flags, ConstantPoolCacheEntry::is_final_shift, done);
+
+    // Don't report races on tsan ignored fields.
+    __ tbnz(flags, ConstantPoolCacheEntry::is_tsan_ignore_shift, done);
+
+    __ lea(c_rarg0, field);
+    __ get_method(c_rarg1);
+    __ call_VM_leaf(CAST_FROM_FN_PTR(address, tsan_function),
+                    c_rarg0 /* addr */, c_rarg1 /* method */, rbcp /* bcp */);
+
+    __ bind(done);
+  } else {
+    __ bind(notAcquireRelease);
+  }
+  __ pop_d(v0);
+  __ popa();
+}
+
+
+#endif
 
 void TemplateTable::iaload()
 {
@@ -2378,6 +2440,25 @@ void TemplateTable::load_field_cp_cache_entry(Register obj,
     const int mirror_offset = in_bytes(Klass::java_mirror_offset());
     __ ldr(obj, Address(obj, mirror_offset));
     __ resolve_oop_handle(obj);
+    TSAN_RUNTIME_ONLY(
+      // Draw a happens-before edge from the class's static initializer to
+      // this lookup.
+
+      // java_lang_Class::_init_lock_offset may not have been initialized
+      // when generating code. It will be initialized at runtime though.
+      // So calculate its address and read from it at runtime.
+      __ pusha();
+      __ mov(c_rarg0, obj);
+      Address init_lock_offset_address((address) java_lang_Class::init_lock_offset_addr(),
+                                       relocInfo::none);
+      __ lea(rscratch1, init_lock_offset_address);
+      __ ldrw(rscratch1, Address(rscratch1, 0));
+      __ add(c_rarg0, c_rarg0, rscratch1);
+      __ call_VM_leaf(CAST_FROM_FN_PTR(address,
+                                       SharedRuntime::tsan_acquire),
+                                       c_rarg0);
+      __ popa();
+    );
   }
 }
 
@@ -2513,6 +2594,7 @@ void TemplateTable::getfield_or_static(int byte_no, bool is_static, RewriteContr
   // btos
   __ access_load_at(T_BYTE, IN_HEAP, r0, field, noreg, noreg);
   __ push(btos);
+  TSAN_RUNTIME_ONLY(tsan_observe_get_or_put(field, raw_flags, SharedRuntime::tsan_read1, btos));
   // Rewrite bytecode to be faster
   if (rc == may_rewrite) {
     patch_bytecode(Bytecodes::_fast_bgetfield, bc, r1);
@@ -2526,6 +2608,7 @@ void TemplateTable::getfield_or_static(int byte_no, bool is_static, RewriteContr
   // ztos (same code as btos)
   __ access_load_at(T_BOOLEAN, IN_HEAP, r0, field, noreg, noreg);
   __ push(ztos);
+  TSAN_RUNTIME_ONLY(tsan_observe_get_or_put(field, raw_flags, SharedRuntime::tsan_read1, ztos));
   // Rewrite bytecode to be faster
   if (rc == may_rewrite) {
     // use btos rewriting, no truncating to t/f bit is needed for getfield.
@@ -2539,6 +2622,11 @@ void TemplateTable::getfield_or_static(int byte_no, bool is_static, RewriteContr
   // atos
   do_oop_load(_masm, field, r0, IN_HEAP);
   __ push(atos);
+  TSAN_RUNTIME_ONLY(tsan_observe_get_or_put(field,
+                                            raw_flags,
+                                            UseCompressedOops ? SharedRuntime::tsan_read4
+                                                              : SharedRuntime::tsan_read8,
+                                            atos));
   if (rc == may_rewrite) {
     patch_bytecode(Bytecodes::_fast_agetfield, bc, r1);
   }
@@ -2550,6 +2638,7 @@ void TemplateTable::getfield_or_static(int byte_no, bool is_static, RewriteContr
   // itos
   __ access_load_at(T_INT, IN_HEAP, r0, field, noreg, noreg);
   __ push(itos);
+  TSAN_RUNTIME_ONLY(tsan_observe_get_or_put(field, raw_flags, SharedRuntime::tsan_read4, itos));
   // Rewrite bytecode to be faster
   if (rc == may_rewrite) {
     patch_bytecode(Bytecodes::_fast_igetfield, bc, r1);
@@ -2562,6 +2651,7 @@ void TemplateTable::getfield_or_static(int byte_no, bool is_static, RewriteContr
   // ctos
   __ access_load_at(T_CHAR, IN_HEAP, r0, field, noreg, noreg);
   __ push(ctos);
+  TSAN_RUNTIME_ONLY(tsan_observe_get_or_put(field, raw_flags, SharedRuntime::tsan_read2, ctos));
   // Rewrite bytecode to be faster
   if (rc == may_rewrite) {
     patch_bytecode(Bytecodes::_fast_cgetfield, bc, r1);
@@ -2574,6 +2664,7 @@ void TemplateTable::getfield_or_static(int byte_no, bool is_static, RewriteContr
   // stos
   __ access_load_at(T_SHORT, IN_HEAP, r0, field, noreg, noreg);
   __ push(stos);
+  TSAN_RUNTIME_ONLY(tsan_observe_get_or_put(field, raw_flags, SharedRuntime::tsan_read2, stos));
   // Rewrite bytecode to be faster
   if (rc == may_rewrite) {
     patch_bytecode(Bytecodes::_fast_sgetfield, bc, r1);
@@ -2586,6 +2677,7 @@ void TemplateTable::getfield_or_static(int byte_no, bool is_static, RewriteContr
   // ltos
   __ access_load_at(T_LONG, IN_HEAP, r0, field, noreg, noreg);
   __ push(ltos);
+  TSAN_RUNTIME_ONLY(tsan_observe_get_or_put(field, raw_flags, SharedRuntime::tsan_read8, ltos));
   // Rewrite bytecode to be faster
   if (rc == may_rewrite) {
     patch_bytecode(Bytecodes::_fast_lgetfield, bc, r1);
@@ -2598,6 +2690,7 @@ void TemplateTable::getfield_or_static(int byte_no, bool is_static, RewriteContr
   // ftos
   __ access_load_at(T_FLOAT, IN_HEAP, noreg /* ftos */, field, noreg, noreg);
   __ push(ftos);
+  TSAN_RUNTIME_ONLY(tsan_observe_get_or_put(field, raw_flags, SharedRuntime::tsan_read4, ftos));
   // Rewrite bytecode to be faster
   if (rc == may_rewrite) {
     patch_bytecode(Bytecodes::_fast_fgetfield, bc, r1);
@@ -2612,6 +2705,7 @@ void TemplateTable::getfield_or_static(int byte_no, bool is_static, RewriteContr
   // dtos
   __ access_load_at(T_DOUBLE, IN_HEAP, noreg /* ftos */, field, noreg, noreg);
   __ push(dtos);
+  TSAN_RUNTIME_ONLY(tsan_observe_get_or_put(field, raw_flags, SharedRuntime::tsan_read8, dtos));
   // Rewrite bytecode to be faster
   if (rc == may_rewrite) {
     patch_bytecode(Bytecodes::_fast_dgetfield, bc, r1);
@@ -2719,6 +2813,7 @@ void TemplateTable::putfield_or_static(int byte_no, bool is_static, RewriteContr
   load_field_cp_cache_entry(obj, cache, index, off, flags, is_static);
 
   Label Done;
+  // save raw flags in r5
   __ mov(r5, flags);
 
   {
@@ -2748,6 +2843,7 @@ void TemplateTable::putfield_or_static(int byte_no, bool is_static, RewriteContr
   {
     __ pop(btos);
     if (!is_static) pop_and_check_object(obj);
+    TSAN_RUNTIME_ONLY(tsan_observe_get_or_put(field, r5, SharedRuntime::tsan_write1, btos));
     __ access_store_at(T_BYTE, IN_HEAP, field, r0, noreg, noreg);
     if (rc == may_rewrite) {
       patch_bytecode(Bytecodes::_fast_bputfield, bc, r1, true, byte_no);
@@ -2763,6 +2859,7 @@ void TemplateTable::putfield_or_static(int byte_no, bool is_static, RewriteContr
   {
     __ pop(ztos);
     if (!is_static) pop_and_check_object(obj);
+    TSAN_RUNTIME_ONLY(tsan_observe_get_or_put(field, r5, SharedRuntime::tsan_write1, ztos));
     __ access_store_at(T_BOOLEAN, IN_HEAP, field, r0, noreg, noreg);
     if (rc == may_rewrite) {
       patch_bytecode(Bytecodes::_fast_zputfield, bc, r1, true, byte_no);
@@ -2778,6 +2875,11 @@ void TemplateTable::putfield_or_static(int byte_no, bool is_static, RewriteContr
   {
     __ pop(atos);
     if (!is_static) pop_and_check_object(obj);
+    TSAN_RUNTIME_ONLY(tsan_observe_get_or_put(field,
+                                              r5,
+                                              UseCompressedOops ? SharedRuntime::tsan_write4
+                                                                : SharedRuntime::tsan_write8,
+                                              atos));
     // Store into the field
     do_oop_store(_masm, field, r0, IN_HEAP);
     if (rc == may_rewrite) {
@@ -2794,6 +2896,7 @@ void TemplateTable::putfield_or_static(int byte_no, bool is_static, RewriteContr
   {
     __ pop(itos);
     if (!is_static) pop_and_check_object(obj);
+    TSAN_RUNTIME_ONLY(tsan_observe_get_or_put(field, r5, SharedRuntime::tsan_write4, itos));
     __ access_store_at(T_INT, IN_HEAP, field, r0, noreg, noreg);
     if (rc == may_rewrite) {
       patch_bytecode(Bytecodes::_fast_iputfield, bc, r1, true, byte_no);
@@ -2809,6 +2912,7 @@ void TemplateTable::putfield_or_static(int byte_no, bool is_static, RewriteContr
   {
     __ pop(ctos);
     if (!is_static) pop_and_check_object(obj);
+    TSAN_RUNTIME_ONLY(tsan_observe_get_or_put(field, r5, SharedRuntime::tsan_write2, ctos));
     __ access_store_at(T_CHAR, IN_HEAP, field, r0, noreg, noreg);
     if (rc == may_rewrite) {
       patch_bytecode(Bytecodes::_fast_cputfield, bc, r1, true, byte_no);
@@ -2824,6 +2928,7 @@ void TemplateTable::putfield_or_static(int byte_no, bool is_static, RewriteContr
   {
     __ pop(stos);
     if (!is_static) pop_and_check_object(obj);
+    TSAN_RUNTIME_ONLY(tsan_observe_get_or_put(field, r5, SharedRuntime::tsan_write2, stos));
     __ access_store_at(T_SHORT, IN_HEAP, field, r0, noreg, noreg);
     if (rc == may_rewrite) {
       patch_bytecode(Bytecodes::_fast_sputfield, bc, r1, true, byte_no);
@@ -2839,6 +2944,7 @@ void TemplateTable::putfield_or_static(int byte_no, bool is_static, RewriteContr
   {
     __ pop(ltos);
     if (!is_static) pop_and_check_object(obj);
+    TSAN_RUNTIME_ONLY(tsan_observe_get_or_put(field, r5, SharedRuntime::tsan_write8, ltos));
     __ access_store_at(T_LONG, IN_HEAP, field, r0, noreg, noreg);
     if (rc == may_rewrite) {
       patch_bytecode(Bytecodes::_fast_lputfield, bc, r1, true, byte_no);
@@ -2854,6 +2960,7 @@ void TemplateTable::putfield_or_static(int byte_no, bool is_static, RewriteContr
   {
     __ pop(ftos);
     if (!is_static) pop_and_check_object(obj);
+    TSAN_RUNTIME_ONLY(tsan_observe_get_or_put(field, r5, SharedRuntime::tsan_write4, ftos));
     __ access_store_at(T_FLOAT, IN_HEAP, field, noreg /* ftos */, noreg, noreg);
     if (rc == may_rewrite) {
       patch_bytecode(Bytecodes::_fast_fputfield, bc, r1, true, byte_no);
@@ -2871,6 +2978,7 @@ void TemplateTable::putfield_or_static(int byte_no, bool is_static, RewriteContr
   {
     __ pop(dtos);
     if (!is_static) pop_and_check_object(obj);
+    TSAN_RUNTIME_ONLY(tsan_observe_get_or_put(field, r5, SharedRuntime::tsan_write8, dtos));
     __ access_store_at(T_DOUBLE, IN_HEAP, field, noreg /* dtos */, noreg, noreg);
     if (rc == may_rewrite) {
       patch_bytecode(Bytecodes::_fast_dputfield, bc, r1, true, byte_no);

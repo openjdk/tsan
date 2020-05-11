@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1997, 2019, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 1997, 2020, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -27,6 +27,9 @@
 #include "interpreter/interp_masm.hpp"
 #include "interpreter/templateTable.hpp"
 #include "runtime/timerTrace.hpp"
+#if INCLUDE_TSAN
+#include "runtime/sharedRuntime.hpp"
+#endif
 
 #ifdef CC_INTERP
 
@@ -67,6 +70,27 @@ void Template::generate(InterpreterMacroAssembler* masm) {
 
 //----------------------------------------------------------------------------------------------------
 // Implementation of TemplateTable: Platform-independent helper routines
+
+#if INCLUDE_TSAN
+
+TemplateTable::TsanMemoryReleaseAcquireFunction TemplateTable::tsan_release_acquire_method(
+    TsanMemoryReadWriteFunction tsan_function) {
+  if (tsan_function == SharedRuntime::tsan_read1
+      || tsan_function == SharedRuntime::tsan_read2
+      || tsan_function == SharedRuntime::tsan_read4
+      || tsan_function == SharedRuntime::tsan_read8) {
+    return SharedRuntime::tsan_acquire;
+  } else if (tsan_function == SharedRuntime::tsan_write1
+      || tsan_function == SharedRuntime::tsan_write2
+      || tsan_function == SharedRuntime::tsan_write4
+      || tsan_function == SharedRuntime::tsan_write8) {
+    return SharedRuntime::tsan_release;
+  }
+  ShouldNotReachHere();
+  return NULL;
+}
+
+#endif
 
 void TemplateTable::call_VM(Register oop_result, address entry_point) {
   assert(_desc->calls_vm(), "inconsistent calls_vm information");

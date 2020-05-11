@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998, 2019, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 1998, 2020, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -43,40 +43,5 @@
                                         Register obj, Register off, Register flags);
   static void fast_storefield_helper(Address field, Register rax);
 
-#if INCLUDE_TSAN
-  typedef void (*TsanMemoryReleaseAcquireFunction)(void* /* address */);
-  typedef void (*TsanMemoryReadWriteFunction)(void* /* address */,
-                                              Method* /* method */,
-                                              address /* bcp */);
-
-  // The corresponding tsan_acquire/release function for a
-  // TsanMemoryReadWriteFunction.
-  static TsanMemoryReleaseAcquireFunction tsan_release_acquire_method(
-      TsanMemoryReadWriteFunction tsan_function);
-
-  // Tell tsan that a member/static variable has been read from or written to.
-  // tsan_function must be one of the SharedRuntime::tsan_read/write*
-  // functions.
-  // Flags is the register that contains the field cache entry flags bitfield.
-  // Because the field may be volatile, for a write, this function must be
-  // called before the write; for a read, this function must be called after
-  // the read. This way the acquire/release is ordered correctly relative to the
-  // read/write.
-  static void tsan_observe_get_or_put(
-      const Address &field,
-      Register flags,
-      TsanMemoryReadWriteFunction tsan_function,
-      TosState tos);
-
-  // Tell tsan that an array has been read from or written to.
-  // tsan_function must be one of the SharedRuntime::tsan_read/write*
-  // functions.
-  // Unlike tsan_observe_get_or_put(), the ordering relative to the
-  // read/write does not matter since array loads/stores are never volatile.
-  static void tsan_observe_load_or_store(
-      const Address& address,
-      TsanMemoryReadWriteFunction tsan_function);
-
-#endif  // INCLUDE_TSAN
 
 #endif // CPU_X86_TEMPLATETABLE_X86_HPP
