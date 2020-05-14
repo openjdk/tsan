@@ -360,8 +360,7 @@ class TemplateTable: AllStatic {
 
    // The corresponding tsan_acquire/release function for a
    // TsanMemoryReadWriteFunction.
-   static TsanMemoryReleaseAcquireFunction tsan_release_acquire_method(
-       TsanMemoryReadWriteFunction tsan_function);
+   static TsanMemoryReleaseAcquireFunction tsan_release_acquire_method(TsanMemoryReadWriteFunction tsan_function);
 
    // Tell tsan that a member/static variable has been read from or written to.
    // tsan_function must be one of the SharedRuntime::tsan_read/write*
@@ -371,20 +370,18 @@ class TemplateTable: AllStatic {
    // called before the write; for a read, this function must be called after
    // the read. This way the acquire/release is ordered correctly relative to the
    // read/write.
-   static void tsan_observe_get_or_put(
-       const Address &field,
-       Register flags,
-       TsanMemoryReadWriteFunction tsan_function,
-       TosState tos);
+   static void tsan_observe_get_or_put(const Address &field,
+                                       Register flags,
+                                       TsanMemoryReadWriteFunction tsan_function,
+                                       TosState tos);
 
    // Tell tsan that an array has been read from or written to.
    // tsan_function must be one of the SharedRuntime::tsan_read/write*
    // functions.
    // Unlike tsan_observe_get_or_put(), the ordering relative to the
    // read/write does not matter since array loads/stores are never volatile.
-   static void tsan_observe_load_or_store(
-       const Address& address,
-       TsanMemoryReadWriteFunction tsan_function);
+   static void tsan_observe_load_or_store(const Address& address,
+                                          TsanMemoryReadWriteFunction tsan_function);
 #endif
 
   // Platform specifics

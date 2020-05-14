@@ -755,6 +755,23 @@ void TemplateTable::index_check(Register array, Register index)
 
 #if INCLUDE_TSAN
 
+void TemplateTable::tsan_observe_load_or_store(const Address& field,
+                                               TsanMemoryReadWriteFunction tsan_function) {
+  assert(ThreadSanitizer, "ThreadSanitizer should be set");
+  if (!ThreadSanitizerJavaMemory) {
+    return;
+  }
+
+  __ pusha();
+  __ push_d(v0);
+  __ lea(c_rarg0, field);
+  __ get_method(c_rarg1);
+  __ call_VM_leaf(CAST_FROM_FN_PTR(address, tsan_function),
+                  c_rarg0 /* addr */, c_rarg1 /* method */, rbcp /* bcp */);
+  __ pop_d(v0);
+  __ popa();
+}
+
 void TemplateTable::tsan_observe_get_or_put(const Address &field,
                                             Register flags,
                                             TsanMemoryReadWriteFunction tsan_function,
@@ -780,6 +797,8 @@ void TemplateTable::tsan_observe_get_or_put(const Address &field,
   if (tos == atos) {
     int32_t acquire_release_mask = 1 << ConstantPoolCacheEntry::is_volatile_shift |
       1 << ConstantPoolCacheEntry::is_tsan_ignore_shift;
+    // acquire_release_mask (0x8200000) can not be encoded into 'tst', but it can be
+    // encoded into just one 'mov' instruction.
     __ mov(rscratch1, acquire_release_mask);
     __ tst(flags, rscratch1);
     __ br(Assembler::EQ, notAcquireRelease);
@@ -824,7 +843,9 @@ void TemplateTable::iaload()
   // r1: index
   index_check(r0, r1); // leaves index in r1, kills rscratch1
   __ add(r1, r1, arrayOopDesc::base_offset_in_bytes(T_INT) >> 2);
-  __ access_load_at(T_INT, IN_HEAP | IS_ARRAY, r0, Address(r0, r1, Address::uxtw(2)), noreg, noreg);
+  Address addr(r0, r1, Address::uxtw(2));
+  TSAN_RUNTIME_ONLY(tsan_observe_load_or_store(addr, SharedRuntime::tsan_read4));
+  __ access_load_at(T_INT, IN_HEAP | IS_ARRAY, r0, addr, noreg, noreg);
 }
 
 void TemplateTable::laload()
@@ -836,7 +857,9 @@ void TemplateTable::laload()
   // r1: index
   index_check(r0, r1); // leaves index in r1, kills rscratch1
   __ add(r1, r1, arrayOopDesc::base_offset_in_bytes(T_LONG) >> 3);
-  __ access_load_at(T_LONG, IN_HEAP | IS_ARRAY, r0, Address(r0, r1, Address::uxtw(3)), noreg, noreg);
+  Address addr(r0, r1, Address::uxtw(3));
+  TSAN_RUNTIME_ONLY(tsan_observe_load_or_store(addr, SharedRuntime::tsan_read8));
+  __ access_load_at(T_LONG, IN_HEAP | IS_ARRAY, r0, addr, noreg, noreg);
 }
 
 void TemplateTable::faload()
@@ -848,7 +871,9 @@ void TemplateTable::faload()
   // r1: index
   index_check(r0, r1); // leaves index in r1, kills rscratch1
   __ add(r1, r1, arrayOopDesc::base_offset_in_bytes(T_FLOAT) >> 2);
-  __ access_load_at(T_FLOAT, IN_HEAP | IS_ARRAY, r0, Address(r0, r1, Address::uxtw(2)), noreg, noreg);
+  Address addr(r0, r1, Address::uxtw(2));
+  TSAN_RUNTIME_ONLY(tsan_observe_load_or_store(addr, SharedRuntime::tsan_read4));
+  __ access_load_at(T_FLOAT, IN_HEAP | IS_ARRAY, r0, addr, noreg, noreg);
 }
 
 void TemplateTable::daload()
@@ -860,7 +885,9 @@ void TemplateTable::daload()
   // r1: index
   index_check(r0, r1); // leaves index in r1, kills rscratch1
   __ add(r1, r1, arrayOopDesc::base_offset_in_bytes(T_DOUBLE) >> 3);
-  __ access_load_at(T_DOUBLE, IN_HEAP | IS_ARRAY, r0, Address(r0, r1, Address::uxtw(3)), noreg, noreg);
+  Address addr(r0, r1, Address::uxtw(3));
+  TSAN_RUNTIME_ONLY(tsan_observe_load_or_store(addr, SharedRuntime::tsan_read8));
+  __ access_load_at(T_DOUBLE, IN_HEAP | IS_ARRAY, r0, addr, noreg, noreg);
 }
 
 void TemplateTable::aaload()
@@ -872,10 +899,10 @@ void TemplateTable::aaload()
   // r1: index
   index_check(r0, r1); // leaves index in r1, kills rscratch1
   __ add(r1, r1, arrayOopDesc::base_offset_in_bytes(T_OBJECT) >> LogBytesPerHeapOop);
-  do_oop_load(_masm,
-              Address(r0, r1, Address::uxtw(LogBytesPerHeapOop)),
-              r0,
-              IS_ARRAY);
+  Address addr(r0, r1, Address::uxtw(LogBytesPerHeapOop));
+  TSAN_RUNTIME_ONLY(tsan_observe_load_or_store(addr, UseCompressedOops ? SharedRuntime::tsan_read4
+                                                                       : SharedRuntime::tsan_read8));
+  do_oop_load(_masm, addr, r0, IS_ARRAY);
 }
 
 void TemplateTable::baload()
@@ -887,7 +914,9 @@ void TemplateTable::baload()
   // r1: index
   index_check(r0, r1); // leaves index in r1, kills rscratch1
   __ add(r1, r1, arrayOopDesc::base_offset_in_bytes(T_BYTE) >> 0);
-  __ access_load_at(T_BYTE, IN_HEAP | IS_ARRAY, r0, Address(r0, r1, Address::uxtw(0)), noreg, noreg);
+  Address addr(r0, r1, Address::uxtw(0));
+  TSAN_RUNTIME_ONLY(tsan_observe_load_or_store(addr, SharedRuntime::tsan_read1));
+  __ access_load_at(T_BYTE, IN_HEAP | IS_ARRAY, r0, addr, noreg, noreg);
 }
 
 void TemplateTable::caload()
@@ -899,12 +928,17 @@ void TemplateTable::caload()
   // r1: index
   index_check(r0, r1); // leaves index in r1, kills rscratch1
   __ add(r1, r1, arrayOopDesc::base_offset_in_bytes(T_CHAR) >> 1);
-  __ access_load_at(T_CHAR, IN_HEAP | IS_ARRAY, r0, Address(r0, r1, Address::uxtw(1)), noreg, noreg);
+  Address addr(r0, r1, Address::uxtw(1));
+  TSAN_RUNTIME_ONLY(tsan_observe_load_or_store(addr, SharedRuntime::tsan_read2));
+  __ access_load_at(T_CHAR, IN_HEAP | IS_ARRAY, r0, addr, noreg, noreg);
 }
 
 // iload followed by caload frequent pair
 void TemplateTable::fast_icaload()
 {
+#ifdef ASSERT
+  TSAN_RUNTIME_ONLY(__ stop("bytecode rewrite should have been disabled in TSAN"););
+#endif
   transition(vtos, itos);
   // load index out of locals
   locals_index(r2);
@@ -928,7 +962,9 @@ void TemplateTable::saload()
   // r1: index
   index_check(r0, r1); // leaves index in r1, kills rscratch1
   __ add(r1, r1, arrayOopDesc::base_offset_in_bytes(T_SHORT) >> 1);
-  __ access_load_at(T_SHORT, IN_HEAP | IS_ARRAY, r0, Address(r0, r1, Address::uxtw(1)), noreg, noreg);
+  Address addr(r0, r1, Address::uxtw(1));
+  TSAN_RUNTIME_ONLY(tsan_observe_load_or_store(addr, SharedRuntime::tsan_read2));
+  __ access_load_at(T_SHORT, IN_HEAP | IS_ARRAY, r0, addr, noreg, noreg);
 }
 
 void TemplateTable::iload(int n)
@@ -1122,7 +1158,9 @@ void TemplateTable::iastore() {
   // r3: array
   index_check(r3, r1); // prefer index in r1
   __ add(r1, r1, arrayOopDesc::base_offset_in_bytes(T_INT) >> 2);
-  __ access_store_at(T_INT, IN_HEAP | IS_ARRAY, Address(r3, r1, Address::uxtw(2)), r0, noreg, noreg);
+  Address addr(r3, r1, Address::uxtw(2));
+  TSAN_RUNTIME_ONLY(tsan_observe_load_or_store(addr, SharedRuntime::tsan_write4));
+  __ access_store_at(T_INT, IN_HEAP | IS_ARRAY, addr, r0, noreg, noreg);
 }
 
 void TemplateTable::lastore() {
@@ -1134,7 +1172,9 @@ void TemplateTable::lastore() {
   // r3: array
   index_check(r3, r1); // prefer index in r1
   __ add(r1, r1, arrayOopDesc::base_offset_in_bytes(T_LONG) >> 3);
-  __ access_store_at(T_LONG, IN_HEAP | IS_ARRAY, Address(r3, r1, Address::uxtw(3)), r0, noreg, noreg);
+  Address addr(r3, r1, Address::uxtw(3));
+  TSAN_RUNTIME_ONLY(tsan_observe_load_or_store(addr, SharedRuntime::tsan_write8));
+  __ access_store_at(T_LONG, IN_HEAP | IS_ARRAY, addr, r0, noreg, noreg);
 }
 
 void TemplateTable::fastore() {
@@ -1146,7 +1186,9 @@ void TemplateTable::fastore() {
   // r3:  array
   index_check(r3, r1); // prefer index in r1
   __ add(r1, r1, arrayOopDesc::base_offset_in_bytes(T_FLOAT) >> 2);
-  __ access_store_at(T_FLOAT, IN_HEAP | IS_ARRAY, Address(r3, r1, Address::uxtw(2)), noreg /* ftos */, noreg, noreg);
+  Address addr(r3, r1, Address::uxtw(2));
+  TSAN_RUNTIME_ONLY(tsan_observe_load_or_store(addr, SharedRuntime::tsan_write4));
+  __ access_store_at(T_FLOAT, IN_HEAP | IS_ARRAY, addr, noreg /* ftos */, noreg, noreg);
 }
 
 void TemplateTable::dastore() {
@@ -1158,7 +1200,9 @@ void TemplateTable::dastore() {
   // r3:  array
   index_check(r3, r1); // prefer index in r1
   __ add(r1, r1, arrayOopDesc::base_offset_in_bytes(T_DOUBLE) >> 3);
-  __ access_store_at(T_DOUBLE, IN_HEAP | IS_ARRAY, Address(r3, r1, Address::uxtw(3)), noreg /* dtos */, noreg, noreg);
+  Address addr(r3, r1, Address::uxtw(3));
+  TSAN_RUNTIME_ONLY(tsan_observe_load_or_store(addr, SharedRuntime::tsan_write8));
+  __ access_store_at(T_DOUBLE, IN_HEAP | IS_ARRAY, addr, noreg /* dtos */, noreg, noreg);
 }
 
 void TemplateTable::aastore() {
@@ -1173,7 +1217,9 @@ void TemplateTable::aastore() {
 
   index_check(r3, r2);     // kills r1
   __ add(r4, r2, arrayOopDesc::base_offset_in_bytes(T_OBJECT) >> LogBytesPerHeapOop);
-
+  // do tsan write after r4 has been defined.
+  TSAN_RUNTIME_ONLY(tsan_observe_load_or_store(element_address, UseCompressedOops ? SharedRuntime::tsan_write4
+                                                                                  : SharedRuntime::tsan_write8));
   // do array store check - check for NULL value first
   __ cbz(r0, is_null);
 
@@ -1235,7 +1281,9 @@ void TemplateTable::bastore()
   __ bind(L_skip);
 
   __ add(r1, r1, arrayOopDesc::base_offset_in_bytes(T_BYTE) >> 0);
-  __ access_store_at(T_BYTE, IN_HEAP | IS_ARRAY, Address(r3, r1, Address::uxtw(0)), r0, noreg, noreg);
+  Address addr(r3, r1, Address::uxtw(0));
+  TSAN_RUNTIME_ONLY(tsan_observe_load_or_store(addr, SharedRuntime::tsan_write1));
+  __ access_store_at(T_BYTE, IN_HEAP | IS_ARRAY, addr, r0, noreg, noreg);
 }
 
 void TemplateTable::castore()
@@ -1248,7 +1296,9 @@ void TemplateTable::castore()
   // r3: array
   index_check(r3, r1); // prefer index in r1
   __ add(r1, r1, arrayOopDesc::base_offset_in_bytes(T_CHAR) >> 1);
-  __ access_store_at(T_CHAR, IN_HEAP | IS_ARRAY, Address(r3, r1, Address::uxtw(1)), r0, noreg, noreg);
+  Address addr(r3, r1, Address::uxtw(1));
+  TSAN_RUNTIME_ONLY(tsan_observe_load_or_store(addr, SharedRuntime::tsan_write2));
+  __ access_store_at(T_CHAR, IN_HEAP | IS_ARRAY, addr, r0, noreg, noreg);
 }
 
 void TemplateTable::sastore()
@@ -3149,6 +3199,9 @@ void TemplateTable::fast_storefield(TosState state)
 
 void TemplateTable::fast_accessfield(TosState state)
 {
+#ifdef ASSERT
+  TSAN_RUNTIME_ONLY(__ stop("bytecode rewrite should have been disabled in TSAN"););
+#endif
   transition(atos, state);
   // Do the JVMTI work here to avoid disturbing the register state below
   if (JvmtiExport::can_post_field_access()) {
@@ -3238,6 +3291,9 @@ void TemplateTable::fast_accessfield(TosState state)
 
 void TemplateTable::fast_xaccess(TosState state)
 {
+#ifdef ASSERT
+  TSAN_RUNTIME_ONLY(__ stop("bytecode rewrite should have been disabled in TSAN"););
+#endif
   transition(vtos, state);
 
   // get receiver
