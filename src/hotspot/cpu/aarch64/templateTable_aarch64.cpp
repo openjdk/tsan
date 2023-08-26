@@ -2618,7 +2618,7 @@ void TemplateTable::getfield_or_static(int byte_no, bool is_static, RewriteContr
   // membar it's possible for a simple Dekker test to fail if loads
   // use LDR;DMB but stores use STLR.  This can happen if C2 compiles
   // the stores in one method and we interpret the loads in another.
-  if (! UseBarriersForVolatile) {
+  if (!is_c1_or_interpreter_only()){
     Label notVolatile;
     __ tbz(raw_flags, ConstantPoolCacheEntry::is_volatile_shift, notVolatile);
     __ membar(MacroAssembler::AnyAny);
@@ -3133,6 +3133,9 @@ void TemplateTable::fast_storefield(TosState state)
   // access constant pool cache
   __ get_cache_and_index_at_bcp(r2, r1, 1);
 
+  // Must prevent reordering of the following cp cache loads with bytecode load
+  __ membar(MacroAssembler::LoadLoad);
+
   // test for volatile with r3
   __ ldrw(r3, Address(r2, in_bytes(base +
                                    ConstantPoolCacheEntry::flags_offset())));
@@ -3228,6 +3231,10 @@ void TemplateTable::fast_accessfield(TosState state)
 
   // access constant pool cache
   __ get_cache_and_index_at_bcp(r2, r1, 1);
+
+  // Must prevent reordering of the following cp cache loads with bytecode load
+  __ membar(MacroAssembler::LoadLoad);
+
   __ ldr(r1, Address(r2, in_bytes(ConstantPoolCache::base_offset() +
                                   ConstantPoolCacheEntry::f2_offset())));
   __ ldrw(r3, Address(r2, in_bytes(ConstantPoolCache::base_offset() +
@@ -3244,7 +3251,7 @@ void TemplateTable::fast_accessfield(TosState state)
   // membar it's possible for a simple Dekker test to fail if loads
   // use LDR;DMB but stores use STLR.  This can happen if C2 compiles
   // the stores in one method and we interpret the loads in another.
-  if (! UseBarriersForVolatile) {
+  if (!is_c1_or_interpreter_only()) {
     Label notVolatile;
     __ tbz(r3, ConstantPoolCacheEntry::is_volatile_shift, notVolatile);
     __ membar(MacroAssembler::AnyAny);
@@ -3309,7 +3316,7 @@ void TemplateTable::fast_xaccess(TosState state)
   // membar it's possible for a simple Dekker test to fail if loads
   // use LDR;DMB but stores use STLR.  This can happen if C2 compiles
   // the stores in one method and we interpret the loads in another.
-  if (! UseBarriersForVolatile) {
+  if (!is_c1_or_interpreter_only()) {
     Label notVolatile;
     __ ldrw(r3, Address(r2, in_bytes(ConstantPoolCache::base_offset() +
                                      ConstantPoolCacheEntry::flags_offset())));

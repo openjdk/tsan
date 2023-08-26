@@ -1335,6 +1335,30 @@ Node* PhiNode::Identity(PhaseGVN* phase) {
     if (id != NULL)  return id;
   }
 
+  // Looking for phis with identical inputs.  If we find one that has
+  // type TypePtr::BOTTOM, replace the current phi with the bottom phi.
+  if (phase->is_IterGVN() && type() == Type::MEMORY && adr_type() !=
+      TypePtr::BOTTOM && !adr_type()->is_known_instance()) {
+    uint phi_len = req();
+    Node* phi_reg = region();
+    for (DUIterator_Fast imax, i = phi_reg->fast_outs(imax); i < imax; i++) {
+      Node* u = phi_reg->fast_out(i);
+      if (u->is_Phi() && u->as_Phi()->type() == Type::MEMORY &&
+          u->adr_type() == TypePtr::BOTTOM && u->in(0) == phi_reg &&
+          u->req() == phi_len) {
+        for (uint j = 1; j < phi_len; j++) {
+          if (in(j) != u->in(j)) {
+            u = NULL;
+            break;
+          }
+        }
+        if (u != NULL) {
+          return u;
+        }
+      }
+    }
+  }
+
   return this;                     // No identity
 }
 
@@ -1776,6 +1800,43 @@ bool PhiNode::is_unsafe_data_reference(Node *in) const {
   return false; // The phi is not reachable from its inputs
 }
 
+// Is this Phi's region or some inputs to the region enqueued for IGVN
+// and so could cause the region to be optimized out?
+bool PhiNode::wait_for_region_igvn(PhaseGVN* phase) {
+  PhaseIterGVN* igvn = phase->is_IterGVN();
+  Unique_Node_List& worklist = igvn->_worklist;
+  bool delay = false;
+  Node* r = in(0);
+  for (uint j = 1; j < req(); j++) {
+    Node* rc = r->in(j);
+    Node* n = in(j);
+    if (rc != NULL &&
+        rc->is_Proj()) {
+      if (worklist.member(rc)) {
+        delay = true;
+      } else if (rc->in(0) != NULL &&
+                 rc->in(0)->is_If()) {
+        if (worklist.member(rc->in(0))) {
+          delay = true;
+        } else if (rc->in(0)->in(1) != NULL &&
+                   rc->in(0)->in(1)->is_Bool()) {
+          if (worklist.member(rc->in(0)->in(1))) {
+            delay = true;
+          } else if (rc->in(0)->in(1)->in(1) != NULL &&
+                     rc->in(0)->in(1)->in(1)->is_Cmp()) {
+            if (worklist.member(rc->in(0)->in(1)->in(1))) {
+              delay = true;
+            }
+          }
+        }
+      }
+    }
+  }
+  if (delay) {
+    worklist.push(this);
+  }
+  return delay;
+}
 
 //------------------------------Ideal------------------------------------------
 // Return a node which is more "ideal" than the current node.  Must preserve
@@ -1834,7 +1895,10 @@ Node *PhiNode::Ideal(PhaseGVN *phase, bool can_reshape) {
 
   bool uncasted = false;
   Node* uin = unique_input(phase, false);
-  if (uin == NULL && can_reshape) {
+  if (uin == NULL && can_reshape &&
+      // If there is a chance that the region can be optimized out do
+      // not add a cast node that we can't remove yet.
+      !wait_for_region_igvn(phase)) {
     uncasted = true;
     uin = unique_input(phase, true);
   }
@@ -1875,13 +1939,12 @@ Node *PhiNode::Ideal(PhaseGVN *phase, bool can_reshape) {
       // Wait until after parsing for the type information to propagate from the casts.
       assert(can_reshape, "Invalid during parsing");
       const Type* phi_type = bottom_type();
-      assert(phi_type->isa_int() || phi_type->isa_long() || phi_type->isa_ptr(), "bad phi type");
-      // Add casts to carry the control dependency of the Phi that is going away
+      assert(phi_type->isa_int() || phi_type->isa_ptr(), "bad phi type");
+      // Add casts to carry the control dependency of the Phi that is
+      // going away
       Node* cast = NULL;
       if (phi_type->isa_int()) {
         cast = ConstraintCastNode::make_cast(Op_CastII, r, uin, phi_type, true);
-      } else if (phi_type->isa_long()) {
-        cast = ConstraintCastNode::make_cast(Op_CastLL, r, uin, phi_type, true);
       } else {
         const Type* uin_type = phase->type(uin);
         if (!phi_type->isa_oopptr() && !uin_type->isa_oopptr()) {
@@ -2034,7 +2097,7 @@ Node *PhiNode::Ideal(PhaseGVN *phase, bool can_reshape) {
         }
         // Accumulate type for resulting Phi
         base_type = base_type->meet_speculative(in(i)->in(AddPNode::Base)->bottom_type());
-        address_type = address_type->meet_speculative(in(i)->in(AddPNode::Base)->bottom_type());
+        address_type = address_type->meet_speculative(in(i)->in(AddPNode::Address)->bottom_type());
       }
       if (doit && base == NULL) {
         // Check for neighboring AddP nodes in a tree.

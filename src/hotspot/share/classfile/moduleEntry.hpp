@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016, 2019, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2016, 2020, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -79,9 +79,9 @@ private:
 
 public:
   void init() {
-    _module = NULL;
+    _module = OopHandle();
+    _pd = OopHandle();
     _loader_data = NULL;
-    _pd = NULL;
     _reads = NULL;
     _version = NULL;
     _location = NULL;
@@ -110,7 +110,7 @@ public:
   ClassLoaderData* loader_data() const                 { return _loader_data; }
 
   void set_loader_data(ClassLoaderData* cld) {
-    assert(!cld->is_unsafe_anonymous(), "Unexpected unsafe anonymous class loader data");
+    assert(!cld->has_class_mirror_holder(), "Unexpected has_class_mirror_holder cld");
     _loader_data = cld;
   }
 

@@ -30,18 +30,18 @@ import java.util.HashMap;
 import java.util.Map;
 
 import com.sun.source.doctree.AttributeTree.ValueKind;
+import com.sun.source.doctree.ErroneousTree;
+import com.sun.source.doctree.UnknownBlockTagTree;
 import com.sun.tools.javac.parser.DocCommentParser.TagParser.Kind;
 import com.sun.tools.javac.parser.Tokens.Comment;
 import com.sun.tools.javac.parser.Tokens.TokenKind;
 import com.sun.tools.javac.tree.DCTree;
 import com.sun.tools.javac.tree.DCTree.DCAttribute;
 import com.sun.tools.javac.tree.DCTree.DCDocComment;
-import com.sun.tools.javac.tree.DCTree.DCEndElement;
 import com.sun.tools.javac.tree.DCTree.DCEndPosTree;
 import com.sun.tools.javac.tree.DCTree.DCErroneous;
 import com.sun.tools.javac.tree.DCTree.DCIdentifier;
 import com.sun.tools.javac.tree.DCTree.DCReference;
-import com.sun.tools.javac.tree.DCTree.DCStartElement;
 import com.sun.tools.javac.tree.DCTree.DCText;
 import com.sun.tools.javac.tree.DocTreeMaker;
 import com.sun.tools.javac.tree.JCTree;
@@ -54,7 +54,7 @@ import com.sun.tools.javac.util.Names;
 import com.sun.tools.javac.util.Position;
 import com.sun.tools.javac.util.StringUtils;
 
-import static com.sun.tools.javac.util.LayoutCharacters.*;
+import static com.sun.tools.javac.util.LayoutCharacters.EOI;
 
 /**
  *
@@ -221,17 +221,6 @@ public class DocCommentParser {
                     }
                     break;
 
-                case '>':
-                    newline = false;
-                    addPendingText(trees, bp - 1);
-                    trees.add(m.at(bp).newErroneousTree(newString(bp, bp + 1), diagSource, "dc.bad.gt"));
-                    nextChar();
-                    if (textStart == -1) {
-                        textStart = bp;
-                        lastNonWhite = -1;
-                    }
-                    break;
-
                 case '{':
                     inlineTag(trees);
                     break;
@@ -261,7 +250,7 @@ public class DocCommentParser {
     /**
      * Read a series of block tags, including their content.
      * Standard tags parse their content appropriately.
-     * Non-standard tags are represented by {@link UnknownBlockTag}.
+     * Non-standard tags are represented by {@link UnknownBlockTagTree}.
      */
     protected List<DCTree> blockTags() {
         ListBuffer<DCTree> tags = new ListBuffer<>();
@@ -273,7 +262,7 @@ public class DocCommentParser {
     /**
      * Read a single block tag, including its content.
      * Standard tags parse their content appropriately.
-     * Non-standard tags are represented by {@link UnknownBlockTag}.
+     * Non-standard tags are represented by {@link UnknownBlockTagTree}.
      */
     protected DCTree blockTag() {
         int p = bp;
@@ -321,8 +310,8 @@ public class DocCommentParser {
     /**
      * Read a single inline tag, including its content.
      * Standard tags parse their content appropriately.
-     * Non-standard tags are represented by {@link UnknownBlockTag}.
-     * Malformed tags may be returned as {@link Erroneous}.
+     * Non-standard tags are represented by {@link UnknownBlockTagTree}.
+     * Malformed tags may be returned as {@link ErroneousTree}.
      */
     protected DCTree inlineTag() {
         int p = bp - 1;
@@ -413,13 +402,6 @@ public class DocCommentParser {
                     lastNonWhite = bp;
                     break;
 
-                case '@':
-                    if (newline)
-                        break loop;
-                    newline = false;
-                    lastNonWhite = bp;
-                    break;
-
                 default:
                     newline = false;
                     lastNonWhite = bp;
@@ -435,9 +417,9 @@ public class DocCommentParser {
      * Matching pairs of {@literal < >} are skipped. The text is terminated by the first
      * unmatched }. It is an error if the beginning of the next tag is detected.
      */
+    // TODO: allowMember is currently ignored
     // TODO: boolean allowMember should be enum FORBID, ALLOW, REQUIRE
     // TODO: improve quality of parse to forbid bad constructions.
-    // TODO: update to use ReferenceParser
     @SuppressWarnings("fallthrough")
     protected DCReference reference(boolean allowMember) throws ParseException {
         int pos = bp;
@@ -492,91 +474,17 @@ public class DocCommentParser {
 
         String sig = newString(pos, bp);
 
-        // Break sig apart into qualifiedExpr member paramTypes.
-        JCTree qualExpr;
-        Name member;
-        List<JCTree> paramTypes;
-
-        Log.DeferredDiagnosticHandler deferredDiagnosticHandler
-                = new Log.DeferredDiagnosticHandler(fac.log);
 
         try {
-            int hash = sig.indexOf("#");
-            int lparen = sig.indexOf("(", hash + 1);
-            if (hash == -1) {
-                if (lparen == -1) {
-                    qualExpr = parseType(sig);
-                    member = null;
-                } else {
-                    qualExpr = null;
-                    member = parseMember(sig.substring(0, lparen));
-                }
-            } else {
-                qualExpr = (hash == 0) ? null : parseType(sig.substring(0, hash));
-                if (lparen == -1)
-                    member = parseMember(sig.substring(hash + 1));
-                else
-                    member = parseMember(sig.substring(hash + 1, lparen));
-            }
-
-            if (lparen < 0) {
-                paramTypes = null;
-            } else {
-                int rparen = sig.indexOf(")", lparen);
-                if (rparen != sig.length() - 1)
-                    throw new ParseException("dc.ref.bad.parens");
-                paramTypes = parseParams(sig.substring(lparen + 1, rparen));
-            }
-
-            if (!deferredDiagnosticHandler.getDiagnostics().isEmpty())
-                throw new ParseException("dc.ref.syntax.error");
-
-        } finally {
-            fac.log.popDiagnosticHandler(deferredDiagnosticHandler);
+            ReferenceParser.Reference ref = new ReferenceParser(fac).parse(sig);
+            return m.at(pos).newReferenceTree(sig,
+                    ref.moduleName, ref.qualExpr,
+                    ref.member, ref.paramTypes)
+                    .setEndPos(bp);
+        } catch (ReferenceParser.ParseException parseException) {
+            throw new ParseException(parseException.getMessage());
         }
 
-        return m.at(pos).newReferenceTree(sig, qualExpr, member, paramTypes).setEndPos(bp);
-    }
-
-    JCTree parseType(String s) throws ParseException {
-        JavacParser p = fac.newParser(s, false, false, false);
-        JCTree tree = p.parseType();
-        if (p.token().kind != TokenKind.EOF)
-            throw new ParseException("dc.ref.unexpected.input");
-        return tree;
-    }
-
-    Name parseMember(String s) throws ParseException {
-        JavacParser p = fac.newParser(s, false, false, false);
-        Name name = p.ident();
-        if (p.token().kind != TokenKind.EOF)
-            throw new ParseException("dc.ref.unexpected.input");
-        return name;
-    }
-
-    List<JCTree> parseParams(String s) throws ParseException {
-        if (s.trim().isEmpty())
-            return List.nil();
-
-        JavacParser p = fac.newParser(s.replace("...", "[]"), false, false, false);
-        ListBuffer<JCTree> paramTypes = new ListBuffer<>();
-        paramTypes.add(p.parseType());
-
-        if (p.token().kind == TokenKind.IDENTIFIER)
-            p.nextToken();
-
-        while (p.token().kind == TokenKind.COMMA) {
-            p.nextToken();
-            paramTypes.add(p.parseType());
-
-            if (p.token().kind == TokenKind.IDENTIFIER)
-                p.nextToken();
-        }
-
-        if (p.token().kind != TokenKind.EOF)
-            throw new ParseException("dc.ref.unexpected.input");
-
-        return paramTypes.toList();
     }
 
     /**

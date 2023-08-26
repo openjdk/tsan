@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2007, 2019, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2007, 2020, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -370,6 +370,9 @@ class SuperWord : public ResourceObj {
   // Ensure node_info contains element "i"
   void grow_node_info(int i) { if (i >= _node_info.length()) _node_info.at_put_grow(i, SWNodeInfo::initial); }
 
+  // should we align vector memory references on this platform?
+  bool vectors_should_be_aligned() { return !Matcher::misaligned_vectors_ok() || AlignVector; }
+
   // memory alignment for a node
   int alignment(Node* n)                     { return _node_info.adr_at(bb_idx(n))->_alignment; }
   void set_alignment(Node* n, int a)         { int i = bb_idx(n); grow_node_info(i); _node_info.adr_at(i)->_alignment = a; }
@@ -481,6 +484,10 @@ class SuperWord : public ResourceObj {
   // Within a store pack, schedule stores together by moving out the sandwiched memory ops according
   // to dependence info; and within a load pack, move loads down to the last executed load.
   void co_locate_pack(Node_List* p);
+  Node* pick_mem_state(Node_List* pk);
+  Node* find_first_mem_state(Node_List* pk);
+  Node* find_last_mem_state(Node_List* pk, Node* first_mem);
+
   // Convert packs into vector node operations
   void output();
   // Create a vector operand for the nodes in pack p for operand: in(opd_idx)

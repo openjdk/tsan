@@ -432,6 +432,9 @@ class SharedRuntime: AllStatic {
   // Find the method that called us.
   static methodHandle find_callee_method(JavaThread* thread, TRAPS);
 
+  static void monitor_enter_helper(oopDesc* obj, BasicLock* lock, JavaThread* thread);
+
+  static void monitor_exit_helper(oopDesc* obj, BasicLock* lock, JavaThread* thread);
 
  private:
   static Handle find_callee_info(JavaThread* thread,

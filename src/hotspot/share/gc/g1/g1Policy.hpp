@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016, 2019, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2016, 2020, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -30,6 +30,7 @@
 #include "gc/g1/g1HeapRegionAttr.hpp"
 #include "gc/g1/g1InitialMarkToMixedTimeTracker.hpp"
 #include "gc/g1/g1MMUTracker.hpp"
+#include "gc/g1/g1OldGenAllocationTracker.hpp"
 #include "gc/g1/g1RemSetTrackingPolicy.hpp"
 #include "gc/g1/g1Predictions.hpp"
 #include "gc/g1/g1YoungGenSizer.hpp"
@@ -101,14 +102,10 @@ class G1Policy: public CHeapObj<mtGC> {
   size_t _rs_length_prediction;
 
   size_t _pending_cards_at_gc_start;
-  size_t _pending_cards_at_prev_gc_end;
-  size_t _total_mutator_refined_cards;
-  size_t _total_concurrent_refined_cards;
-  Tickspan _total_concurrent_refinement_time;
 
-  // The amount of allocated bytes in old gen during the last mutator and the following
-  // young GC phase.
-  size_t _bytes_allocated_in_old_since_last_gc;
+  // Tracking the allocation in the old generation between
+  // two GCs.
+  G1OldGenAllocationTracker _old_gen_alloc_tracker;
 
   G1InitialMarkToMixedTimeTracker _initial_mark_to_mixed;
 
@@ -123,8 +120,7 @@ public:
 
   G1RemSetTrackingPolicy* remset_tracker() { return &_remset_tracker; }
 
-  // Add the given number of bytes to the total number of allocated bytes in the old gen.
-  void add_bytes_allocated_in_old_since_last_gc(size_t bytes) { _bytes_allocated_in_old_since_last_gc += bytes; }
+  G1OldGenAllocationTracker* old_gen_alloc_tracker() { return &_old_gen_alloc_tracker; }
 
   void set_region_eden(HeapRegion* hr) {
     hr->set_eden();
@@ -287,7 +283,8 @@ private:
   // Indicate that we aborted marking before doing any mixed GCs.
   void abort_time_to_mixed_tracking();
 
-  void record_concurrent_refinement_data(bool is_full_collection);
+  // Record and log stats before not-full collection.
+  void record_concurrent_refinement_stats();
 
 public:
 

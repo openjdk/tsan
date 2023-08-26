@@ -312,11 +312,13 @@ STDMETHODIMP SAOutputCallbacks::Output(THIS_
     }
     strcpy(m_msgBuffer, msg);
   } else {
-    m_msgBuffer = (char*) realloc(m_msgBuffer, len + strlen(m_msgBuffer));
-    if (m_msgBuffer == 0) {
+    char* newBuffer = (char*)realloc(m_msgBuffer, len + strlen(m_msgBuffer));
+    if (newBuffer == nullptr) {
+      // old m_msgBuffer buffer is still valid
       fprintf(stderr, "out of memory debugger output!\n");
       return S_FALSE;
     }
+    m_msgBuffer = newBuffer;
     strcat(m_msgBuffer, msg);
   }
   return S_OK;
@@ -396,6 +398,19 @@ static bool setImageAndSymbolPath(JNIEnv* env, jobject obj) {
   return true;
 }
 
+static HRESULT WaitForEvent(IDebugControl *ptrIDebugControl) {
+  HRESULT hr = ptrIDebugControl->WaitForEvent(DEBUG_WAIT_DEFAULT, INFINITE);
+  // see JDK-8204994: sometimes WaitForEvent fails with E_ACCESSDENIED,
+  // but succeeds on 2nd call.
+  // To minimize possible noise retry 3 times.
+  for (int i = 0; hr == E_ACCESSDENIED && i < 3; i++) {
+    // yield current thread use of a processor (short delay).
+    SwitchToThread();
+    hr = ptrIDebugControl->WaitForEvent(DEBUG_WAIT_DEFAULT, INFINITE);
+  }
+  return hr;
+}
+
 static bool openDumpFile(JNIEnv* env, jobject obj, jstring coreFileName) {
   // open the dump file
   AutoJavaString coreFile(env, coreFileName);
@@ -411,7 +426,7 @@ static bool openDumpFile(JNIEnv* env, jobject obj, jstring coreFileName) {
 
   IDebugControl* ptrIDebugControl = (IDebugControl*)env->GetLongField(obj, ptrIDebugControl_ID);
   CHECK_EXCEPTION_(false);
-  COM_VERIFY_OK_(ptrIDebugControl->WaitForEvent(DEBUG_WAIT_DEFAULT, INFINITE),
+  COM_VERIFY_OK_(WaitForEvent(ptrIDebugControl),
                  "Windbg Error: WaitForEvent failed!", false);
 
   return true;
@@ -448,7 +463,7 @@ static bool attachToProcess(JNIEnv* env, jobject obj, jint pid) {
   IDebugControl* ptrIDebugControl = (IDebugControl*) env->GetLongField(obj,
                                                      ptrIDebugControl_ID);
   CHECK_EXCEPTION_(false);
-  COM_VERIFY_OK_(ptrIDebugControl->WaitForEvent(DEBUG_WAIT_DEFAULT, INFINITE),
+  COM_VERIFY_OK_(WaitForEvent(ptrIDebugControl),
                  "Windbg Error: WaitForEvent failed!", false);
 
   return true;
@@ -726,11 +741,9 @@ JNIEXPORT jbyteArray JNICALL Java_sun_jvm_hotspot_debugger_windbg_WindbgDebugger
   CHECK_EXCEPTION_(0);
 
   ULONG bytesRead;
-  COM_VERIFY_OK_(ptrIDebugDataSpaces->ReadVirtual((ULONG64)address, arrayBytes,
-                                                  (ULONG)numBytes, &bytesRead),
-                 "Windbg Error: ReadVirtual failed!", 0);
-
-  if (bytesRead != numBytes) {
+  const HRESULT hr = ptrIDebugDataSpaces->ReadVirtual((ULONG64)address, arrayBytes,
+                                                      (ULONG)numBytes, &bytesRead);
+  if (hr != S_OK || bytesRead != numBytes) {
      return 0;
   }
 

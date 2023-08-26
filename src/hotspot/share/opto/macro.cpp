@@ -364,10 +364,12 @@ Node* PhaseMacroExpand::make_arraycopy_load(ArrayCopyNode* ac, intptr_t offset, 
   Node* res = NULL;
   if (ac->is_clonebasic()) {
     assert(ac->in(ArrayCopyNode::Src) != ac->in(ArrayCopyNode::Dest), "clone source equals destination");
-    Node* base = ac->in(ArrayCopyNode::Src)->in(AddPNode::Base);
+    Node* base = ac->in(ArrayCopyNode::Src);
     Node* adr = _igvn.transform(new AddPNode(base, base, MakeConX(offset)));
     const TypePtr* adr_type = _igvn.type(base)->is_ptr()->add_offset(offset);
-    res = LoadNode::make(_igvn, ctl, mem, adr, adr_type, type, bt, MemNode::unordered, LoadNode::UnknownControl);
+    MergeMemNode* mergemen = MergeMemNode::make(mem);
+    BarrierSetC2* bs = BarrierSet::barrier_set()->barrier_set_c2();
+    res = ArrayCopyNode::load(bs, &_igvn, ctl, mergemen, adr, adr_type, type, bt);
   } else {
     if (ac->modifies(offset, offset, &_igvn, true)) {
       assert(ac->in(ArrayCopyNode::Dest) == alloc->result_cast(), "arraycopy destination should be allocation's result");
@@ -405,11 +407,12 @@ Node* PhaseMacroExpand::make_arraycopy_load(ArrayCopyNode* ac, intptr_t offset, 
           return NULL;
         }
       }
-      res = LoadNode::make(_igvn, ctl, mem, adr, adr_type, type, bt, MemNode::unordered, LoadNode::UnknownControl);
+      MergeMemNode* mergemen = MergeMemNode::make(mem);
+      BarrierSetC2* bs = BarrierSet::barrier_set()->barrier_set_c2();
+      res = ArrayCopyNode::load(bs, &_igvn, ctl, mergemen, adr, adr_type, type, bt);
     }
   }
   if (res != NULL) {
-    res = _igvn.transform(res);
     if (ftype->isa_narrowoop()) {
       // PhaseMacroExpand::scalar_replacement adds DecodeN nodes
       res = _igvn.transform(new EncodePNode(res, ftype));
@@ -671,11 +674,8 @@ bool PhaseMacroExpand::can_eliminate_allocation(AllocateNode *alloc, GrowableArr
         for (DUIterator_Fast kmax, k = use->fast_outs(kmax);
                                    k < kmax && can_eliminate; k++) {
           Node* n = use->fast_out(k);
-          if (!n->is_Store() && n->Opcode() != Op_CastP2X &&
-              SHENANDOAHGC_ONLY((!UseShenandoahGC || !ShenandoahBarrierSetC2::is_shenandoah_wb_pre_call(n)) &&)
-              !(n->is_ArrayCopy() &&
-                n->as_ArrayCopy()->is_clonebasic() &&
-                n->in(ArrayCopyNode::Dest) == use)) {
+          if (!n->is_Store() && n->Opcode() != Op_CastP2X
+              SHENANDOAHGC_ONLY(&& (!UseShenandoahGC || !ShenandoahBarrierSetC2::is_shenandoah_wb_pre_call(n))) ) {
             DEBUG_ONLY(disq_node = n;)
             if (n->is_Load() || n->is_LoadStore()) {
               NOT_PRODUCT(fail_eliminate = "Field load";)
@@ -686,7 +686,8 @@ bool PhaseMacroExpand::can_eliminate_allocation(AllocateNode *alloc, GrowableArr
           }
         }
       } else if (use->is_ArrayCopy() &&
-                 (use->as_ArrayCopy()->is_arraycopy_validated() ||
+                 (use->as_ArrayCopy()->is_clonebasic() ||
+                  use->as_ArrayCopy()->is_arraycopy_validated() ||
                   use->as_ArrayCopy()->is_copyof_validated() ||
                   use->as_ArrayCopy()->is_copyofrange_validated()) &&
                  use->in(ArrayCopyNode::Dest) == res) {
@@ -967,18 +968,6 @@ void PhaseMacroExpand::process_users_of_allocation(CallNode *alloc) {
             }
 #endif
             _igvn.replace_node(n, n->in(MemNode::Memory));
-          } else if (n->is_ArrayCopy()) {
-            // Disconnect ArrayCopy node
-            ArrayCopyNode* ac = n->as_ArrayCopy();
-            assert(ac->is_clonebasic(), "unexpected array copy kind");
-            Node* membar_after = ac->proj_out(TypeFunc::Control)->unique_ctrl_out();
-            disconnect_projections(ac, _igvn);
-            assert(alloc->in(0)->is_Proj() && alloc->in(0)->in(0)->Opcode() == Op_MemBarCPUOrder, "mem barrier expected before allocation");
-            Node* membar_before = alloc->in(0)->in(0);
-            disconnect_projections(membar_before->as_MemBar(), _igvn);
-            if (membar_after->is_MemBar()) {
-              disconnect_projections(membar_after->as_MemBar(), _igvn);
-            }
           } else {
             eliminate_gc_barrier(n);
           }
@@ -988,30 +977,40 @@ void PhaseMacroExpand::process_users_of_allocation(CallNode *alloc) {
       } else if (use->is_ArrayCopy()) {
         // Disconnect ArrayCopy node
         ArrayCopyNode* ac = use->as_ArrayCopy();
-        assert(ac->is_arraycopy_validated() ||
-               ac->is_copyof_validated() ||
-               ac->is_copyofrange_validated(), "unsupported");
-        CallProjections callprojs;
-        ac->extract_projections(&callprojs, true);
+        if (ac->is_clonebasic()) {
+          Node* membar_after = ac->proj_out(TypeFunc::Control)->unique_ctrl_out();
+          disconnect_projections(ac, _igvn);
+          assert(alloc->in(TypeFunc::Memory)->is_Proj() && alloc->in(TypeFunc::Memory)->in(0)->Opcode() == Op_MemBarCPUOrder, "mem barrier expected before allocation");
+          Node* membar_before = alloc->in(TypeFunc::Memory)->in(0);
+          disconnect_projections(membar_before->as_MemBar(), _igvn);
+          if (membar_after->is_MemBar()) {
+            disconnect_projections(membar_after->as_MemBar(), _igvn);
+          }
+        } else {
+          assert(ac->is_arraycopy_validated() ||
+                 ac->is_copyof_validated() ||
+                 ac->is_copyofrange_validated(), "unsupported");
+          CallProjections callprojs;
+          ac->extract_projections(&callprojs, true);
 
-        _igvn.replace_node(callprojs.fallthrough_ioproj, ac->in(TypeFunc::I_O));
-        _igvn.replace_node(callprojs.fallthrough_memproj, ac->in(TypeFunc::Memory));
-        _igvn.replace_node(callprojs.fallthrough_catchproj, ac->in(TypeFunc::Control));
+          _igvn.replace_node(callprojs.fallthrough_ioproj, ac->in(TypeFunc::I_O));
+          _igvn.replace_node(callprojs.fallthrough_memproj, ac->in(TypeFunc::Memory));
+          _igvn.replace_node(callprojs.fallthrough_catchproj, ac->in(TypeFunc::Control));
 
-        // Set control to top. IGVN will remove the remaining projections
-        ac->set_req(0, top());
-        ac->replace_edge(res, top());
+          // Set control to top. IGVN will remove the remaining projections
+          ac->set_req(0, top());
+          ac->replace_edge(res, top());
 
-        // Disconnect src right away: it can help find new
-        // opportunities for allocation elimination
-        Node* src = ac->in(ArrayCopyNode::Src);
-        ac->replace_edge(src, top());
-        // src can be top at this point if src and dest of the
-        // arraycopy were the same
-        if (src->outcnt() == 0 && !src->is_top()) {
-          _igvn.remove_dead_node(src);
+          // Disconnect src right away: it can help find new
+          // opportunities for allocation elimination
+          Node* src = ac->in(ArrayCopyNode::Src);
+          ac->replace_edge(src, top());
+          // src can be top at this point if src and dest of the
+          // arraycopy were the same
+          if (src->outcnt() == 0 && !src->is_top()) {
+            _igvn.remove_dead_node(src);
+          }
         }
-
         _igvn._worklist.push(ac);
       } else {
         eliminate_gc_barrier(use);
@@ -1334,14 +1333,23 @@ void PhaseMacroExpand::expand_allocate_common(
   if (!allocation_has_use) {
     InitializeNode* init = alloc->initialization();
     if (init != NULL) {
-      yank_initalize_node(init);
-      assert(init->outcnt() == 0, "all uses must be deleted");
-      _igvn.remove_dead_node(init);
+      init->remove(&_igvn);
     }
     if (expand_fast_path && (initial_slow_test == NULL)) {
       // Remove allocation node and return.
       // Size is a non-negative constant -> no initial check needed -> directly to fast path.
       // Also, no usages -> empty fast path -> no fall out to slow path -> nothing left.
+#ifndef PRODUCT
+      if (PrintEliminateAllocations) {
+        tty->print("NotUsed ");
+        Node* res = alloc->proj_out_or_null(TypeFunc::Parms);
+        if (res != NULL) {
+          res->dump();
+        } else {
+          alloc->dump();
+        }
+      }
+#endif
       yank_alloc_node(alloc);
       return;
     }
@@ -1579,6 +1587,16 @@ void PhaseMacroExpand::yank_alloc_node(AllocateNode* alloc) {
   Node* i_o  = alloc->in(TypeFunc::I_O);
 
   extract_call_projections(alloc);
+  if (_resproj != NULL) {
+    for (DUIterator_Fast imax, i = _resproj->fast_outs(imax); i < imax; i++) {
+      Node* use = _resproj->fast_out(i);
+      use->isa_MemBar()->remove(&_igvn);
+      --imax;
+      --i; // back up iterator
+    }
+    assert(_resproj->outcnt() == 0, "all uses must be deleted");
+    _igvn.remove_dead_node(_resproj);
+  }
   if (_fallthroughcatchproj != NULL) {
     migrate_outs(_fallthroughcatchproj, ctrl);
     _igvn.remove_dead_node(_fallthroughcatchproj);
@@ -1608,6 +1626,15 @@ void PhaseMacroExpand::yank_alloc_node(AllocateNode* alloc) {
     _igvn.rehash_node_delayed(_ioproj_catchall);
     _ioproj_catchall->set_req(0, top());
   }
+#ifndef PRODUCT
+  if (PrintEliminateAllocations) {
+    if (alloc->is_AllocateArray()) {
+      tty->print_cr("++++ Eliminated: %d AllocateArray", alloc->_idx);
+    } else {
+      tty->print_cr("++++ Eliminated: %d Allocate", alloc->_idx);
+    }
+  }
+#endif
   _igvn.remove_dead_node(alloc);
 }
 
@@ -1709,26 +1736,6 @@ void PhaseMacroExpand::expand_dtrace_alloc_probe(AllocateNode* alloc, Node* oop,
     transform_later(ctrl);
     rawmem = new ProjNode(call, TypeFunc::Memory);
     transform_later(rawmem);
-  }
-}
-
-// Remove InitializeNode without use
-void PhaseMacroExpand::yank_initalize_node(InitializeNode* initnode) {
-  assert(initnode->proj_out_or_null(TypeFunc::Parms) == NULL, "No uses allowed");
-
-  Node* ctrl_out  = initnode->proj_out_or_null(TypeFunc::Control);
-  Node* mem_out   = initnode->proj_out_or_null(TypeFunc::Memory);
-
-  // Move all uses of each to
-  if (ctrl_out != NULL ) {
-    migrate_outs(ctrl_out, initnode->in(TypeFunc::Control));
-    _igvn.remove_dead_node(ctrl_out);
-  }
-
-  // Move all uses of each to
-  if (mem_out != NULL ) {
-    migrate_outs(mem_out, initnode->in(TypeFunc::Memory));
-    _igvn.remove_dead_node(mem_out);
   }
 }
 
@@ -2630,9 +2637,10 @@ void PhaseMacroExpand::eliminate_macro_nodes() {
         break;
       case Node::Class_SubTypeCheck:
         break;
+      case Node::Class_Opaque1:
+        break;
       default:
         assert(n->Opcode() == Op_LoopLimit ||
-               n->Opcode() == Op_Opaque1   ||
                n->Opcode() == Op_Opaque2   ||
                n->Opcode() == Op_Opaque3   ||
                BarrierSet::barrier_set()->barrier_set_c2()->is_gc_barrier_node(n),
@@ -2649,12 +2657,6 @@ void PhaseMacroExpand::eliminate_macro_nodes() {
 bool PhaseMacroExpand::expand_macro_nodes() {
   // Last attempt to eliminate macro nodes.
   eliminate_macro_nodes();
-
-  // Make sure expansion will not cause node limit to be exceeded.
-  // Worst case is a macro node gets expanded into about 200 nodes.
-  // Allow 50% more for optimization.
-  if (C->check_node_count(C->macro_count() * 300, "out of nodes before macro expansion" ) )
-    return true;
 
   // Eliminate Opaque and LoopLimit nodes. Do it after all loop optimizations.
   bool progress = true;
@@ -2674,7 +2676,7 @@ bool PhaseMacroExpand::expand_macro_nodes() {
         C->remove_macro_node(n);
         _igvn._worklist.push(n);
         success = true;
-      } else if (n->Opcode() == Op_Opaque1 || n->Opcode() == Op_Opaque2) {
+      } else if (n->is_Opaque1() || n->Opcode() == Op_Opaque2) {
         _igvn.replace_node(n, n->in(1));
         success = true;
 #if INCLUDE_RTM_OPT
@@ -2711,17 +2713,44 @@ bool PhaseMacroExpand::expand_macro_nodes() {
     }
   }
 
+  // Clean up the graph so we're less likely to hit the maximum node
+  // limit
+  _igvn.set_delay_transform(false);
+  _igvn.optimize();
+  if (C->failing())  return true;
+  _igvn.set_delay_transform(true);
+
+
+  // Because we run IGVN after each expansion, some macro nodes may go
+  // dead and be removed from the list as we iterate over it. Move
+  // Allocate nodes (processed in a second pass) at the beginning of
+  // the list and then iterate from the last element of the list until
+  // an Allocate node is seen. This is robust to random deletion in
+  // the list due to nodes going dead.
+  C->sort_macro_nodes();
+
   // expand arraycopy "macro" nodes first
   // For ReduceBulkZeroing, we must first process all arraycopy nodes
   // before the allocate nodes are expanded.
-  for (int i = C->macro_count(); i > 0; i--) {
-    Node* n = C->macro_node(i-1);
+  while (C->macro_count() > 0) {
+    int macro_count = C->macro_count();
+    Node * n = C->macro_node(macro_count-1);
     assert(n->is_macro(), "only macro nodes expected here");
     if (_igvn.type(n) == Type::TOP || (n->in(0) != NULL && n->in(0)->is_top())) {
       // node is unreachable, so don't try to expand it
       C->remove_macro_node(n);
       continue;
     }
+    if (n->is_Allocate()) {
+      break;
+    }
+    // Make sure expansion will not cause node limit to be exceeded.
+    // Worst case is a macro node gets expanded into about 200 nodes.
+    // Allow 50% more for optimization.
+    if (C->check_node_count(300, "out of nodes before macro expansion")) {
+      return true;
+    }
+
     debug_only(int old_macro_count = C->macro_count(););
     switch (n->class_id()) {
     case Node::Class_Lock:
@@ -2740,18 +2769,23 @@ bool PhaseMacroExpand::expand_macro_nodes() {
       expand_subtypecheck_node(n->as_SubTypeCheck());
       assert(C->macro_count() == (old_macro_count - 1), "expansion must have deleted one node from macro list");
       break;
+    default:
+      assert(false, "unknown node type in macro list");
     }
+    assert(C->macro_count() < macro_count, "must have deleted a node from macro list");
     if (C->failing())  return true;
+
+    // Clean up the graph so we're less likely to hit the maximum node
+    // limit
+    _igvn.set_delay_transform(false);
+    _igvn.optimize();
+    if (C->failing())  return true;
+    _igvn.set_delay_transform(true);
   }
 
   // All nodes except Allocate nodes are expanded now. There could be
   // new optimization opportunities (such as folding newly created
   // load from a just allocated object). Run IGVN.
-  _igvn.set_delay_transform(false);
-  _igvn.optimize();
-  if (C->failing())  return true;
-
-  _igvn.set_delay_transform(true);
 
   // expand "macro" nodes
   // nodes are removed from the macro list as they are processed
@@ -2763,6 +2797,12 @@ bool PhaseMacroExpand::expand_macro_nodes() {
       // node is unreachable, so don't try to expand it
       C->remove_macro_node(n);
       continue;
+    }
+    // Make sure expansion will not cause node limit to be exceeded.
+    // Worst case is a macro node gets expanded into about 200 nodes.
+    // Allow 50% more for optimization.
+    if (C->check_node_count(300, "out of nodes before macro expansion")) {
+      return true;
     }
     switch (n->class_id()) {
     case Node::Class_Allocate:
@@ -2776,10 +2816,15 @@ bool PhaseMacroExpand::expand_macro_nodes() {
     }
     assert(C->macro_count() < macro_count, "must have deleted a node from macro list");
     if (C->failing())  return true;
+
+    // Clean up the graph so we're less likely to hit the maximum node
+    // limit
+    _igvn.set_delay_transform(false);
+    _igvn.optimize();
+    if (C->failing())  return true;
+    _igvn.set_delay_transform(true);
   }
 
   _igvn.set_delay_transform(false);
-  _igvn.optimize();
-  if (C->failing())  return true;
   return false;
 }

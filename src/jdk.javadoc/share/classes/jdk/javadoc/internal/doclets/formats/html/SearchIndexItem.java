@@ -25,6 +25,8 @@
 
 package jdk.javadoc.internal.doclets.formats.html;
 
+import javax.lang.model.element.Element;
+
 /**
  * Index item for search.
  *
@@ -40,7 +42,14 @@ public class SearchIndexItem {
         PACKAGES,
         TYPES,
         MEMBERS,
-        SEARCH_TAGS
+        /**
+         * The category of items corresponding to {@code {@index}} tags.
+         */
+        INDEX,
+        /**
+         * The category of items corresponding to {@code {@systemProperty}} tags.
+         */
+        SYSTEM_PROPERTY
     }
 
     private Category category;
@@ -51,7 +60,7 @@ public class SearchIndexItem {
     private String containingClass = "";
     private String holder = "";
     private String description = "";
-    private boolean systemProperty;
+    private Element element;
 
     public void setLabel(String l) {
         label = l;
@@ -101,12 +110,16 @@ public class SearchIndexItem {
         return description;
     }
 
-    public void setSystemProperty(boolean value) {
-        systemProperty = value;
+    protected Category getCategory() {
+        return category;
     }
 
-    public boolean isSystemProperty() {
-        return systemProperty;
+    public void setElement(Element element) {
+        this.element = element;
+    }
+
+    public Element getElement() {
+        return element;
     }
 
     @Override
@@ -135,6 +148,9 @@ public class SearchIndexItem {
                 if (!containingPackage.isEmpty()) {
                     item.append("\"p\":\"").append(containingPackage).append("\",");
                 }
+                if (!containingModule.isEmpty()) {
+                    item.append("\"m\":\"").append(containingModule).append("\",");
+                }
                 item.append("\"l\":\"").append(label).append("\"");
                 if (!url.isEmpty()) {
                     item.append(",\"u\":\"").append(url).append("\"");
@@ -142,8 +158,11 @@ public class SearchIndexItem {
                 item.append("}");
                 break;
             case MEMBERS:
-                item.append("{")
-                        .append("\"p\":\"").append(containingPackage).append("\",")
+                item.append("{");
+                if (!containingModule.isEmpty()) {
+                    item.append("\"m\":\"").append(containingModule).append("\",");
+                }
+                item.append("\"p\":\"").append(containingPackage).append("\",")
                         .append("\"c\":\"").append(containingClass).append("\",")
                         .append("\"l\":\"").append(label).append("\"");
                 if (!url.isEmpty()) {
@@ -151,7 +170,8 @@ public class SearchIndexItem {
                 }
                 item.append("}");
                 break;
-            case SEARCH_TAGS:
+            case INDEX:
+            case SYSTEM_PROPERTY:
                 item.append("{")
                         .append("\"l\":\"").append(label).append("\",")
                         .append("\"h\":\"").append(holder).append("\",");

@@ -28,14 +28,12 @@ package gc.g1;
  * @bug 8035406 8027295 8035398 8019342 8027959 8048179 8027962 8069330 8076463 8150630 8160055 8177059 8166191
  * @summary Ensure the output for a minor GC with G1
  * includes the expected necessary messages.
- * @key gc
  * @requires vm.gc.G1
  * @library /test/lib
  * @modules java.base/jdk.internal.misc
  *          java.management
  * @build sun.hotspot.WhiteBox
  * @run driver ClassFileInstaller sun.hotspot.WhiteBox
- *                                sun.hotspot.WhiteBox$WhiteBoxPermission
  * @run main/othervm -Xbootclasspath/a:. -XX:+UnlockDiagnosticVMOptions -XX:+WhiteBoxAPI
  *                   gc.g1.TestGCLogMessages
  */
@@ -127,7 +125,7 @@ public class TestGCLogMessages {
         new LogMessageWithLevel("JNI Handles Roots", Level.TRACE),
         new LogMessageWithLevel("ObjectSynchronizer Roots", Level.TRACE),
         new LogMessageWithLevel("Management Roots", Level.TRACE),
-        new LogMessageWithLevel("SystemDictionary Roots", Level.TRACE),
+        new LogMessageWithLevel("VM Global Roots", Level.TRACE),
         new LogMessageWithLevel("CLDG Roots", Level.TRACE),
         new LogMessageWithLevel("JVMTI Roots", Level.TRACE),
         new LogMessageWithLevel("CM RefProcessor Roots", Level.TRACE),
@@ -143,6 +141,7 @@ public class TestGCLogMessages {
         new LogMessageWithLevel("Expand Heap After Collection", Level.DEBUG),
         new LogMessageWithLevel("Region Register", Level.DEBUG),
         new LogMessageWithLevel("Prepare Heap Roots", Level.DEBUG),
+        new LogMessageWithLevel("Concatenate Dirty Card Logs", Level.DEBUG),
         // Free CSet
         new LogMessageWithLevel("Free Collection Set", Level.DEBUG),
         new LogMessageWithLevel("Serial Free Collection Set", Level.TRACE),
@@ -186,6 +185,7 @@ public class TestGCLogMessages {
 
     public static void main(String[] args) throws Exception {
         new TestGCLogMessages().testNormalLogs();
+        new TestGCLogMessages().testConcurrentRefinementLogs();
         new TestGCLogMessages().testWithToSpaceExhaustionLogs();
         new TestGCLogMessages().testWithInitialMark();
         new TestGCLogMessages().testExpandHeap();
@@ -219,6 +219,23 @@ public class TestGCLogMessages {
         output = new OutputAnalyzer(pb.start());
         checkMessagesAtLevel(output, allLogMessages, Level.TRACE);
         output.shouldHaveExitValue(0);
+    }
+
+    LogMessageWithLevel concRefineMessages[] = new LogMessageWithLevel[] {
+        new LogMessageWithLevel("Mutator refinement: ", Level.DEBUG),
+        new LogMessageWithLevel("Concurrent refinement: ", Level.DEBUG),
+        new LogMessageWithLevel("Total refinement: ", Level.DEBUG),
+        // "Concurrent refinement rate" optionally printed if any.
+        // "Generate dirty cards rate" optionally printed if any.
+    };
+
+    private void testConcurrentRefinementLogs() throws Exception {
+        ProcessBuilder pb = ProcessTools.createJavaProcessBuilder("-XX:+UseG1GC",
+                                                                  "-Xmx10M",
+                                                                  "-Xlog:gc+refine+stats=debug",
+                                                                  GCTest.class.getName());
+        OutputAnalyzer output = new OutputAnalyzer(pb.start());
+        checkMessagesAtLevel(output, concRefineMessages, Level.DEBUG);
     }
 
     LogMessageWithLevel exhFailureMessages[] = new LogMessageWithLevel[] {

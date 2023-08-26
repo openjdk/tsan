@@ -629,7 +629,7 @@ public final class Unsafe {
 
         long p = allocateMemory0(bytes);
         if (p == 0) {
-            throw new OutOfMemoryError();
+            throw new OutOfMemoryError("Unable to allocate " + bytes + " bytes");
         }
 
         return p;
@@ -685,7 +685,7 @@ public final class Unsafe {
 
         long p = (address == 0) ? allocateMemory0(bytes) : reallocateMemory0(address, bytes);
         if (p == 0) {
-            throw new OutOfMemoryError();
+            throw new OutOfMemoryError("Unable to allocate " + bytes + " bytes");
         }
 
         return p;
@@ -883,7 +883,7 @@ public final class Unsafe {
         checkPrimitivePointer(destBase, destOffset);
     }
 
-   /**
+    /**
      * Copies all elements from one block of memory to another block, byte swapping the
      * elements on the fly.
      *
@@ -2224,14 +2224,14 @@ public final class Unsafe {
     }
 
     /*
-      * Versions of {@link #putReferenceVolatile(Object, long, Object)}
-      * that do not guarantee immediate visibility of the store to
-      * other threads. This method is generally only useful if the
-      * underlying field is a Java volatile (or if an array cell, one
-      * that is otherwise only accessed using volatile accesses).
-      *
-      * Corresponds to C11 atomic_store_explicit(..., memory_order_release).
-      */
+     * Versions of {@link #putReferenceVolatile(Object, long, Object)}
+     * that do not guarantee immediate visibility of the store to
+     * other threads. This method is generally only useful if the
+     * underlying field is a Java volatile (or if an array cell, one
+     * that is otherwise only accessed using volatile accesses).
+     *
+     * Corresponds to C11 atomic_store_explicit(..., memory_order_release).
+     */
 
     /** Release version of {@link #putReferenceVolatile(Object, long, Object)} */
     @HotSpotIntrinsicCandidate

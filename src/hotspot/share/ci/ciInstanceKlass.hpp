@@ -56,6 +56,8 @@ private:
   bool                   _has_nonstatic_fields;
   bool                   _has_nonstatic_concrete_methods;
   bool                   _is_unsafe_anonymous;
+  bool                   _is_hidden;
+  bool                   _is_record;
 
   ciFlags                _flags;
   jint                   _nonstatic_field_size;
@@ -191,8 +193,16 @@ public:
     return _has_nonstatic_concrete_methods;
   }
 
-  bool is_unsafe_anonymous() {
+  bool is_unsafe_anonymous() const {
     return _is_unsafe_anonymous;
+  }
+
+  bool is_hidden() const {
+    return _is_hidden;
+  }
+
+  bool is_record() const {
+    return _is_record;
   }
 
   ciInstanceKlass* get_canonical_holder(int offset);

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1996, 2019, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 1996, 2020, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -54,7 +54,7 @@ import jdk.internal.vm.annotation.ForceInline;
  * and a few other miscellaneous operations.
  *
  * <p>Semantics of arithmetic operations exactly mimic those of Java's integer
- * arithmetic operators, as defined in <i>The Java&trade; Language Specification</i>.
+ * arithmetic operators, as defined in <i>The Java Language Specification</i>.
  * For example, division by zero throws an {@code ArithmeticException}, and
  * division of a negative by a positive yields a negative (or zero) remainder.
  *
@@ -80,8 +80,8 @@ import jdk.internal.vm.annotation.ForceInline;
  * inclusive.
  *
  * <p>Bit operations operate on a single bit of the two's-complement
- * representation of their operand.  If necessary, the operand is sign-
- * extended so that it contains the designated bit.  None of the single-bit
+ * representation of their operand.  If necessary, the operand is sign-extended
+ * so that it contains the designated bit.  None of the single-bit
  * operations can produce a BigInteger with a different sign from the
  * BigInteger being operated on, as they affect only a single bit, and the
  * arbitrarily large abstraction provided by this class ensures that conceptually
@@ -4152,7 +4152,7 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
      * conversion is analogous to a
      * <i>narrowing primitive conversion</i> from {@code long} to
      * {@code int} as defined in
-     * <cite>The Java&trade; Language Specification</cite>:
+     * <cite>The Java Language Specification</cite>:
      * if this BigInteger is too big to fit in an
      * {@code int}, only the low-order 32 bits are returned.
      * Note that this conversion can lose information about the
@@ -4174,7 +4174,7 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
      * conversion is analogous to a
      * <i>narrowing primitive conversion</i> from {@code long} to
      * {@code int} as defined in
-     * <cite>The Java&trade; Language Specification</cite>:
+     * <cite>The Java Language Specification</cite>:
      * if this BigInteger is too big to fit in a
      * {@code long}, only the low-order 64 bits are returned.
      * Note that this conversion can lose information about the
@@ -4198,7 +4198,7 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
      * conversion is similar to the
      * <i>narrowing primitive conversion</i> from {@code double} to
      * {@code float} as defined in
-     * <cite>The Java&trade; Language Specification</cite>:
+     * <cite>The Java Language Specification</cite>:
      * if this BigInteger has too great a magnitude
      * to represent as a {@code float}, it will be converted to
      * {@link Float#NEGATIVE_INFINITY} or {@link
@@ -4283,7 +4283,7 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
      * conversion is similar to the
      * <i>narrowing primitive conversion</i> from {@code double} to
      * {@code float} as defined in
-     * <cite>The Java&trade; Language Specification</cite>:
+     * <cite>The Java Language Specification</cite>:
      * if this BigInteger has too great a magnitude
      * to represent as a {@code double}, it will be converted to
      * {@link Double#NEGATIVE_INFINITY} or {@link
@@ -4595,13 +4595,13 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
     }
 
     /**
-    * Returns the index of the int that contains the first nonzero int in the
-    * little-endian binary representation of the magnitude (int 0 is the
-    * least significant). If the magnitude is zero, return value is undefined.
-    *
-    * <p>Note: never used for a BigInteger with a magnitude of zero.
-    * @see #getInt.
-    */
+     * Returns the index of the int that contains the first nonzero int in the
+     * little-endian binary representation of the magnitude (int 0 is the
+     * least significant). If the magnitude is zero, return value is undefined.
+     *
+     * <p>Note: never used for a BigInteger with a magnitude of zero.
+     * @see #getInt.
+     */
     private int firstNonzeroIntNum() {
         int fn = firstNonzeroIntNumPlusTwo - 2;
         if (fn == -2) { // firstNonzeroIntNum not initialized yet

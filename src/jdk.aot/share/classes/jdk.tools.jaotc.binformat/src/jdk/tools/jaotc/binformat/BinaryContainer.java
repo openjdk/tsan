@@ -52,8 +52,8 @@ import jdk.tools.jaotc.binformat.pecoff.JPECoffRelocObject;
  *
  * <p>
  * This class holds information necessary to create platform-specific binary containers such as
- * ELFContainer for Linux and Solaris operating systems or MachOContainer for Mac OS or PEContainer
- * for MS Windows operating systems.
+ * ELFContainer for Linux or MachOContainer for Mac OS or PEContainer for MS Windows operating
+ * systems.
  *
  * <p>
  * Method APIs provided by this class are used to construct and populate platform-independent
@@ -300,7 +300,7 @@ public final class BinaryContainer implements SymbolTable {
 
         this.codeEntryAlignment = graalHotSpotVMConfig.codeEntryAlignment;
 
-        this.threadLocalHandshakes = graalHotSpotVMConfig.threadLocalHandshakes;
+        this.threadLocalHandshakes = graalHotSpotVMConfig.useThreadLocalPolling;
 
         // Section unique name is limited to 8 characters due to limitation on Windows.
         // Name could be longer but only first 8 characters are stored on Windows.
@@ -337,34 +337,43 @@ public final class BinaryContainer implements SymbolTable {
     private void recordConfiguration(GraalHotSpotVMConfig graalHotSpotVMConfig, GraphBuilderConfiguration graphBuilderConfig, int gc) {
         // @Checkstyle: stop
         // @formatter:off
-        boolean[] booleanFlags = { graalHotSpotVMConfig.cAssertions, // Debug VM
-                                   graalHotSpotVMConfig.useCompressedOops,
-                                   graalHotSpotVMConfig.useCompressedClassPointers,
-                                   graalHotSpotVMConfig.useTLAB,
-                                   graalHotSpotVMConfig.useBiasedLocking,
-                                   TieredAOT.getValue(graalOptions),
-                                   graalHotSpotVMConfig.enableContended,
-                                   graalHotSpotVMConfig.restrictContended,
-                                   graphBuilderConfig.omitAssertions(),
-        };
+        ArrayList<Boolean> booleanFlagsList = new ArrayList<>();
 
-        int[] intFlags         = { graalHotSpotVMConfig.getOopEncoding().getShift(),
-                                   graalHotSpotVMConfig.getKlassEncoding().getShift(),
-                                   graalHotSpotVMConfig.contendedPaddingWidth,
-                                   1 << graalHotSpotVMConfig.logMinObjAlignment(),
-                                   graalHotSpotVMConfig.codeSegmentSize,
-                                   gc
-        };
+        booleanFlagsList.addAll(Arrays.asList(graalHotSpotVMConfig.cAssertions, // Debug VM
+                                              graalHotSpotVMConfig.useCompressedOops,
+                                              graalHotSpotVMConfig.useCompressedClassPointers));
+        if (JavaVersionUtil.JAVA_SPEC < 15) {
+            // See JDK-8236224. FieldsAllocationStyle and CompactFields flags were removed in JDK15.
+            booleanFlagsList.add(graalHotSpotVMConfig.compactFields);
+        }
+        booleanFlagsList.addAll(Arrays.asList(graalHotSpotVMConfig.useTLAB,
+                                              graalHotSpotVMConfig.useBiasedLocking,
+                                              TieredAOT.getValue(graalOptions),
+                                              graalHotSpotVMConfig.enableContended,
+                                              graalHotSpotVMConfig.restrictContended,
+                                              graphBuilderConfig.omitAssertions()));
+        if (JavaVersionUtil.JAVA_SPEC < 14) {
+            // See JDK-8220049. Thread local handshakes are on by default since JDK14, the command line option has been removed.
+            booleanFlagsList.add(graalHotSpotVMConfig.useThreadLocalPolling);
+        }
+
+        ArrayList<Integer> intFlagsList = new ArrayList<>();
+        intFlagsList.addAll(Arrays.asList(graalHotSpotVMConfig.getOopEncoding().getShift(),
+                                          graalHotSpotVMConfig.getKlassEncoding().getShift(),
+                                          graalHotSpotVMConfig.contendedPaddingWidth));
+        if (JavaVersionUtil.JAVA_SPEC < 15) {
+            // See JDK-8236224. FieldsAllocationStyle and CompactFields flags were removed in JDK15.
+            intFlagsList.add(graalHotSpotVMConfig.fieldsAllocationStyle);
+        }
+        intFlagsList.addAll(Arrays.asList(1 << graalHotSpotVMConfig.logMinObjAlignment(),
+                                          graalHotSpotVMConfig.codeSegmentSize,
+                                          gc));
+
         // @formatter:on
         // @Checkstyle: resume
 
-        if (JavaVersionUtil.JAVA_SPEC < 14) {
-            // See JDK-8220049. Thread local handshakes are on by default since JDK14, the command line option has been removed.
-            booleanFlags = Arrays.copyOf(booleanFlags, booleanFlags.length + 1);
-            booleanFlags[booleanFlags.length - 1] = graalHotSpotVMConfig.threadLocalHandshakes;
-        }
-
-        byte[] booleanFlagsAsBytes = flagsToByteArray(booleanFlags);
+        byte[] booleanFlagsAsBytes = booleanListToByteArray(booleanFlagsList);
+        int[] intFlags = intFlagsList.stream().mapToInt(i -> i).toArray();
         int size0 = configContainer.getByteStreamSize();
 
         // @formatter:off
@@ -381,10 +390,10 @@ public final class BinaryContainer implements SymbolTable {
         assert size == computedSize;
     }
 
-    private static byte[] flagsToByteArray(boolean[] flags) {
-        byte[] byteArray = new byte[flags.length];
-        for (int i = 0; i < flags.length; ++i) {
-            byteArray[i] = boolToByte(flags[i]);
+    private static byte[] booleanListToByteArray(ArrayList<Boolean> list) {
+        byte[] byteArray = new byte[list.size()];
+        for (int i = 0; i < list.size(); ++i) {
+            byteArray[i] = boolToByte(list.get(i));
         }
         return byteArray;
     }
@@ -548,7 +557,6 @@ public final class BinaryContainer implements SymbolTable {
         String osName = System.getProperty("os.name");
         switch (osName) {
             case "Linux":
-            case "SunOS":
                 JELFRelocObject elfobj = JELFRelocObject.newInstance(this, outputFileName);
                 elfobj.createELFRelocObject(relocationTable, symbolTable.values());
                 break;

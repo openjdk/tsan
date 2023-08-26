@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1997, 2019, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 1997, 2020, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -538,8 +538,7 @@ Node* LoadNode::find_previous_arraycopy(PhaseTransform* phase, Node* ld_alloc, N
         mb->in(0)->in(0) != NULL && mb->in(0)->in(0)->is_ArrayCopy()) {
       ArrayCopyNode* ac = mb->in(0)->in(0)->as_ArrayCopy();
       if (ac->is_clonebasic()) {
-        intptr_t offset;
-        AllocateNode* alloc = AllocateNode::Ideal_allocation(ac->in(ArrayCopyNode::Dest), phase, offset);
+        AllocateNode* alloc = AllocateNode::Ideal_allocation(ac->in(ArrayCopyNode::Dest), phase);
         if (alloc != NULL && alloc == ld_alloc) {
           return ac;
         }
@@ -946,12 +945,11 @@ Node* LoadNode::can_see_arraycopy_value(Node* st, PhaseGVN* phase) const {
     if (ac->as_ArrayCopy()->is_clonebasic()) {
       assert(ld_alloc != NULL, "need an alloc");
       assert(addp->is_AddP(), "address must be addp");
-      assert(ac->in(ArrayCopyNode::Dest)->is_AddP(), "dest must be an address");
       BarrierSetC2* bs = BarrierSet::barrier_set()->barrier_set_c2();
-      assert(bs->step_over_gc_barrier(addp->in(AddPNode::Base)) == bs->step_over_gc_barrier(ac->in(ArrayCopyNode::Dest)->in(AddPNode::Base)), "strange pattern");
-      assert(bs->step_over_gc_barrier(addp->in(AddPNode::Address)) == bs->step_over_gc_barrier(ac->in(ArrayCopyNode::Dest)->in(AddPNode::Address)), "strange pattern");
-      addp->set_req(AddPNode::Base, src->in(AddPNode::Base));
-      addp->set_req(AddPNode::Address, src->in(AddPNode::Address));
+      assert(bs->step_over_gc_barrier(addp->in(AddPNode::Base)) == bs->step_over_gc_barrier(ac->in(ArrayCopyNode::Dest)), "strange pattern");
+      assert(bs->step_over_gc_barrier(addp->in(AddPNode::Address)) == bs->step_over_gc_barrier(ac->in(ArrayCopyNode::Dest)), "strange pattern");
+      addp->set_req(AddPNode::Base, src);
+      addp->set_req(AddPNode::Address, src);
     } else {
       assert(ac->as_ArrayCopy()->is_arraycopy_validated() ||
              ac->as_ArrayCopy()->is_copyof_validated() ||
@@ -2155,15 +2153,15 @@ const Type* LoadNode::klass_value_common(PhaseGVN* phase) const {
     ciInstanceKlass* ik = tinst->klass()->as_instance_klass();
     int offset = tinst->offset();
     if (ik == phase->C->env()->Class_klass()
-        && (offset == java_lang_Class::klass_offset_in_bytes() ||
-            offset == java_lang_Class::array_klass_offset_in_bytes())) {
+        && (offset == java_lang_Class::klass_offset() ||
+            offset == java_lang_Class::array_klass_offset())) {
       // We are loading a special hidden field from a Class mirror object,
       // the field which points to the VM's Klass metaobject.
       ciType* t = tinst->java_mirror_type();
       // java_mirror_type returns non-null for compile-time Class constants.
       if (t != NULL) {
         // constant oop => constant klass
-        if (offset == java_lang_Class::array_klass_offset_in_bytes()) {
+        if (offset == java_lang_Class::array_klass_offset()) {
           if (t->is_void()) {
             // We cannot create a void array.  Since void is a primitive type return null
             // klass.  Users of this result need to do a null check on the returned klass.
@@ -2316,7 +2314,7 @@ Node* LoadNode::klass_identity_common(PhaseGVN* phase) {
   // introducing a new debug info operator for Klass.java_mirror).
 
   if (toop->isa_instptr() && toop->klass() == phase->C->env()->Class_klass()
-      && offset == java_lang_Class::klass_offset_in_bytes()) {
+      && offset == java_lang_Class::klass_offset()) {
     if (base->is_Load()) {
       Node* base2 = base->in(MemNode::Address);
       if (base2->is_Load()) { /* direct load of a load which is the OopHandle */
@@ -4606,24 +4604,6 @@ Node *MergeMemNode::Ideal(PhaseGVN *phase, bool can_reshape) {
       new_mem = old_mmem->memory_at(i);
     }
     // else preceding memory was not a MergeMem
-
-    // replace equivalent phis (unfortunately, they do not GVN together)
-    if (new_mem != NULL && new_mem != new_base &&
-        new_mem->req() == phi_len && new_mem->in(0) == phi_reg) {
-      if (new_mem->is_Phi()) {
-        PhiNode* phi_mem = new_mem->as_Phi();
-        for (uint i = 1; i < phi_len; i++) {
-          if (phi_base->in(i) != phi_mem->in(i)) {
-            phi_mem = NULL;
-            break;
-          }
-        }
-        if (phi_mem != NULL) {
-          // equivalent phi nodes; revert to the def
-          new_mem = new_base;
-        }
-      }
-    }
 
     // maybe store down a new value
     Node* new_in = new_mem;

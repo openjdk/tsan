@@ -372,6 +372,27 @@ final class HotSpotResolvedObjectTypeImpl extends HotSpotResolvedJavaType implem
         return isArray() ? true : getInitState() >= config().instanceKlassStateLinked;
     }
 
+    @Override
+    public void link() {
+        if (!isLinked()) {
+            runtime().compilerToVm.ensureLinked(this);
+        }
+    }
+
+    @Override
+    public boolean hasDefaultMethods() {
+        HotSpotVMConfig config = config();
+        int miscFlags = UNSAFE.getChar(getMetaspaceKlass() + config.instanceKlassMiscFlagsOffset);
+        return (miscFlags & config.jvmMiscFlagsHasDefaultMethods) != 0;
+    }
+
+    @Override
+    public boolean declaresDefaultMethods() {
+        HotSpotVMConfig config = config();
+        int miscFlags = UNSAFE.getChar(getMetaspaceKlass() + config.instanceKlassMiscFlagsOffset);
+        return (miscFlags & config.jvmMiscFlagsDeclaresDefaultMethods) != 0;
+    }
+
     /**
      * Returns the value of the state field {@code InstanceKlass::_init_state} of the metaspace
      * klass.
@@ -817,12 +838,10 @@ final class HotSpotResolvedObjectTypeImpl extends HotSpotResolvedJavaType implem
 
     @Override
     public String getSourceFileName() {
-        HotSpotVMConfig config = config();
-        final int sourceFileNameIndex = UNSAFE.getChar(getMetaspaceKlass() + config.instanceKlassSourceFileNameIndexOffset);
-        if (sourceFileNameIndex == 0) {
+        if (isArray()) {
             return null;
         }
-        return getConstantPool().lookupUtf8(sourceFileNameIndex);
+        return getConstantPool().getSourceFileName();
     }
 
     @Override

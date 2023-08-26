@@ -26,7 +26,6 @@
 #include "gc/shared/barrierSet.hpp"
 #include "interpreter/interp_masm.hpp"
 #include "interpreter/templateTable.hpp"
-#include "runtime/timerTrace.hpp"
 #if INCLUDE_TSAN
 #include "runtime/sharedRuntime.hpp"
 #endif
@@ -192,13 +191,11 @@ void TemplateTable::transition(TosState tos_in, TosState tos_out) {
 //----------------------------------------------------------------------------------------------------
 // Implementation of TemplateTable: Initialization
 
-bool                       TemplateTable::_is_initialized = false;
 Template                   TemplateTable::_template_table     [Bytecodes::number_of_codes];
 Template                   TemplateTable::_template_table_wide[Bytecodes::number_of_codes];
 
 Template*                  TemplateTable::_desc;
 InterpreterMacroAssembler* TemplateTable::_masm;
-BarrierSet*                TemplateTable::_bs;
 
 
 void TemplateTable::def(Bytecodes::Code code, int flags, TosState in, TosState out, void (*gen)(), char filler) {
@@ -209,9 +206,6 @@ void TemplateTable::def(Bytecodes::Code code, int flags, TosState in, TosState o
 
 void TemplateTable::def(Bytecodes::Code code, int flags, TosState in, TosState out, void (*gen)(int arg), int arg) {
   // should factor out these constants
-  const int ubcp = 1 << Template::uses_bcp_bit;
-  const int disp = 1 << Template::does_dispatch_bit;
-  const int clvm = 1 << Template::calls_vm_bit;
   const int iswd = 1 << Template::wide_bit;
   // determine which table to use
   bool is_wide = (flags & iswd) != 0;
@@ -247,12 +241,11 @@ void TemplateTable::def(Bytecodes::Code code, int flags, TosState in, TosState o
 }
 
 void TemplateTable::initialize() {
-  if (_is_initialized) return;
-
-  // Initialize table
-  TraceTime timer("TemplateTable initialization", TRACETIME_LOG(Info, startuptime));
-
-  _bs = BarrierSet::barrier_set();
+#ifdef ASSERT
+  static bool is_initialized = false;
+  assert(!is_initialized, "must only initialize once");
+  is_initialized = true;
+#endif
 
   // For better readability
   const char _    = ' ';
@@ -531,14 +524,7 @@ void TemplateTable::initialize() {
   def(Bytecodes::_shouldnotreachhere   , ____|____|____|____, vtos, vtos, shouldnotreachhere ,  _           );
   // platform specific bytecodes
   pd_initialize();
-
-  _is_initialized = true;
 }
-
-void templateTable_init() {
-  TemplateTable::initialize();
-}
-
 
 void TemplateTable::unimplemented_bc() {
   _masm->unimplemented( Bytecodes::name(_desc->bytecode()));

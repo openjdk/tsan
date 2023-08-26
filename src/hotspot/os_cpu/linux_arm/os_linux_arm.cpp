@@ -44,6 +44,7 @@
 #include "runtime/javaCalls.hpp"
 #include "runtime/mutexLocker.hpp"
 #include "runtime/osThread.hpp"
+#include "runtime/safepointMechanism.hpp"
 #include "runtime/sharedRuntime.hpp"
 #include "runtime/stubRoutines.hpp"
 #include "runtime/timer.hpp"
@@ -336,7 +337,7 @@ extern "C" int JVM_handle_linux_signal(int sig, siginfo_t* info,
         return 1;
       }
       // check if fault address is within thread stack
-      if (thread->on_local_stack(addr)) {
+      if (thread->is_in_full_stack(addr)) {
         // stack overflow
         if (thread->in_stack_yellow_reserved_zone(addr)) {
           thread->disable_stack_yellow_reserved_zone();
@@ -376,7 +377,7 @@ extern "C" int JVM_handle_linux_signal(int sig, siginfo_t* info,
       // Java thread running in Java code => find exception handler if any
       // a fault inside compiled code, the interpreter, or a stub
 
-      if (sig == SIGSEGV && os::is_poll_address((address)info->si_addr)) {
+      if (sig == SIGSEGV && SafepointMechanism::is_poll_address((address)info->si_addr)) {
         stub = SharedRuntime::get_poll_stub(pc);
       } else if (sig == SIGBUS) {
         // BugId 4454115: A read from a MappedByteBuffer can fault

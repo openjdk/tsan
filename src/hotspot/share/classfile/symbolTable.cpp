@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1997, 2019, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 1997, 2020, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -56,7 +56,7 @@ const size_t ON_STACK_BUFFER_LENGTH = 128;
 
 inline bool symbol_equals_compact_hashtable_entry(Symbol* value, const char* key, int len) {
   if (value->equals(key, len)) {
-    assert(value->refcount() == PERM_REFCOUNT, "must be shared");
+    assert(value->is_permanent(), "must be shared");
     return true;
   } else {
     return false;
@@ -139,10 +139,10 @@ public:
   static void free_node(void* memory, Value const& value) {
     // We get here because #1 some threads lost a race to insert a newly created Symbol
     // or #2 we're cleaning up unused symbol.
-    // If #1, then the symbol can be either permanent (refcount==PERM_REFCOUNT),
+    // If #1, then the symbol can be either permanent,
     // or regular newly created one (refcount==1)
     // If #2, then the symbol is dead (refcount==0)
-    assert((value->refcount() == PERM_REFCOUNT) || (value->refcount() == 1) || (value->refcount() == 0),
+    assert(value->is_permanent() || (value->refcount() == 1) || (value->refcount() == 0),
            "refcount %d", value->refcount());
     if (value->refcount() == 1) {
       value->decrement_refcount();
@@ -176,7 +176,12 @@ void SymbolTable::create_table ()  {
 }
 
 void SymbolTable::delete_symbol(Symbol* sym) {
-  if (sym->refcount() == PERM_REFCOUNT) {
+  if (Arguments::is_dumping_archive()) {
+    // Do not delete symbols as we may be in the middle of preparing the
+    // symbols for dumping.
+    return;
+  }
+  if (sym->is_permanent()) {
     MutexLocker ml(SymbolArena_lock, Mutex::_no_safepoint_check_flag); // Protect arena
     // Deleting permanent symbol should not occur very often (insert race condition),
     // so log it.
@@ -221,12 +226,18 @@ Symbol* SymbolTable::allocate_symbol(const char* name, int len, bool c_heap) {
 
   Symbol* sym;
   if (Arguments::is_dumping_archive()) {
+    // Need to make all symbols permanent -- or else some symbols may be GC'ed
+    // during the archive dumping code that's executed outside of a safepoint.
     c_heap = false;
   }
   if (c_heap) {
     // refcount starts as 1
     sym = new (len) Symbol((const u1*)name, len, 1);
     assert(sym != NULL, "new should call vm_exit_out_of_memory if C_HEAP is exhausted");
+  } else if (DumpSharedSpaces) {
+    // See comments inside Symbol::operator new(size_t, int)
+    sym = new (len) Symbol((const u1*)name, len, PERM_REFCOUNT);
+    assert(sym != NULL, "new should call vm_exit_out_of_memory if failed to allocate symbol during DumpSharedSpaces");
   } else {
     // Allocate to global arena
     MutexLocker ml(SymbolArena_lock, Mutex::_no_safepoint_check_flag); // Protect arena
@@ -258,6 +269,7 @@ public:
 
 // Call function for all symbols in the symbol table.
 void SymbolTable::symbols_do(SymbolClosure *cl) {
+  assert(SafepointSynchronize::is_at_safepoint(), "Must be at safepoint");
   // all symbols from shared table
   SharedSymbolIterator iter(cl);
   _shared_table.iterate(&iter);
@@ -265,9 +277,7 @@ void SymbolTable::symbols_do(SymbolClosure *cl) {
 
   // all symbols from the dynamic table
   SymbolsDo sd(cl);
-  if (!_local_table->try_scan(Thread::current(), sd)) {
-    log_info(symboltable)("symbols_do unavailable at this moment");
-  }
+  _local_table->do_safepoint_scan(sd);
 }
 
 class MetaspacePointersDo : StackObj {
@@ -459,6 +469,8 @@ Symbol* SymbolTable::lookup_only_unicode(const jchar* name, int utf16_length,
 void SymbolTable::new_symbols(ClassLoaderData* loader_data, const constantPoolHandle& cp,
                               int names_count, const char** names, int* lengths,
                               int* cp_indices, unsigned int* hashValues) {
+  // Note that c_heap will be true for non-strong hidden classes and unsafe anonymous classes
+  // even if their loader is the boot loader because they will have a different cld.
   bool c_heap = !loader_data->is_the_null_class_loader_data();
   for (int i = 0; i < names_count; i++) {
     const char *name = names[i];

@@ -395,7 +395,7 @@ import jdk.internal.util.ArraysSupport;
  *
  * <p> Backslashes within string literals in Java source code are interpreted
  * as required by
- * <cite>The Java&trade; Language Specification</cite>
+ * <cite>The Java Language Specification</cite>
  * as either Unicode escapes (section 3.3) or other character escapes (section 3.10.6)
  * It is therefore necessary to double backslashes in string
  * literals that represent regular expressions to protect them from
@@ -544,7 +544,7 @@ import jdk.internal.util.ArraysSupport;
  * <p>
  * <b>Unicode escape sequences</b> such as <code>&#92;u2014</code> in Java source code
  * are processed as described in section 3.3 of
- * <cite>The Java&trade; Language Specification</cite>.
+ * <cite>The Java Language Specification</cite>.
  * Such escape sequences are also implemented directly by the regular-expression
  * parser so that Unicode escapes can be used in expressions that are read from
  * files or from the keyboard.  Thus the strings <code>"&#92;u2014"</code> and
@@ -760,7 +760,7 @@ import jdk.internal.util.ArraysSupport;
  *
  * <p> For a more precise description of the behavior of regular expression
  * constructs, please see <a href="http://www.oreilly.com/catalog/regex3/">
- * <i>Mastering Regular Expressions, 3nd Edition</i>, Jeffrey E. F. Friedl,
+ * <i>Mastering Regular Expressions, 3rd Edition</i>, Jeffrey E. F. Friedl,
  * O'Reilly and Associates, 2006.</a>
  * </p>
  *
@@ -778,14 +778,13 @@ public final class Pattern
     implements java.io.Serializable
 {
 
-    /**
+    /*
      * Regular expression modifier values.  Instead of being passed as
      * arguments, they can also be passed as inline modifiers.
      * For example, the following statements have the same effect.
-     * <pre>
-     * Pattern p1 = Pattern.compile("abc", Pattern.CASE_INSENSITIVE|Pattern.MULTILINE);
-     * Pattern p2 = Pattern.compile("(?im)abc", 0);
-     * </pre>
+     *
+     *   Pattern p1 = Pattern.compile("abc", Pattern.CASE_INSENSITIVE|Pattern.MULTILINE);
+     *   Pattern p2 = Pattern.compile("(?im)abc", 0);
      */
 
     /**
@@ -1682,7 +1681,7 @@ loop:   for(int x=0, offset=0; x<nCodePoints; x++, offset+=len) {
         try {
             newTempLen = Math.addExact(j + 2, Math.multiplyExact(3, pLen - i));
         } catch (ArithmeticException ae) {
-            throw new OutOfMemoryError();
+            throw new OutOfMemoryError("Required pattern length too large");
         }
         int[] newtemp = new int[newTempLen];
         System.arraycopy(temp, 0, newtemp, 0, j);
@@ -2904,7 +2903,7 @@ loop:   for(int x=0, offset=0; x<nCodePoints; x++, offset+=len) {
                     break;
                 case "gc":
                 case "general_category":
-                    p = CharPredicates.forProperty(value);
+                    p = CharPredicates.forProperty(value, has(CASE_INSENSITIVE));
                     break;
                 default:
                     break;
@@ -2920,17 +2919,16 @@ loop:   for(int x=0, offset=0; x<nCodePoints; x++, offset+=len) {
             } else if (name.startsWith("Is")) {
                 // \p{IsGeneralCategory} and \p{IsScriptName}
                 String shortName = name.substring(2);
-                p = CharPredicates.forUnicodeProperty(shortName);
+                p = CharPredicates.forUnicodeProperty(shortName, has(CASE_INSENSITIVE));
                 if (p == null)
-                    p = CharPredicates.forProperty(shortName);
+                    p = CharPredicates.forProperty(shortName, has(CASE_INSENSITIVE));
                 if (p == null)
                     p = CharPredicates.forUnicodeScript(shortName);
             } else {
-                if (has(UNICODE_CHARACTER_CLASS)) {
-                    p = CharPredicates.forPOSIXName(name);
-                }
+                if (has(UNICODE_CHARACTER_CLASS))
+                    p = CharPredicates.forPOSIXName(name, has(CASE_INSENSITIVE));
                 if (p == null)
-                    p = CharPredicates.forProperty(name);
+                    p = CharPredicates.forProperty(name, has(CASE_INSENSITIVE));
             }
             if (p == null)
                 throw error("Unknown character property name {" + name + "}");
@@ -4037,17 +4035,8 @@ loop:   for(int x=0, offset=0; x<nCodePoints; x++, offset+=len) {
             if (i < matcher.to) {
                 int ch0 = Character.codePointAt(seq, i);
                 int n = Character.charCount(ch0);
-                int j = i + n;
-                // Fast check if it's necessary to call Normalizer;
-                // testing Grapheme.isBoundary is enough for this case
-                while (j < matcher.to) {
-                    int ch1 = Character.codePointAt(seq, j);
-                    if (Grapheme.isBoundary(ch0, ch1))
-                        break;
-                    ch0 = ch1;
-                    j += Character.charCount(ch1);
-                }
-                if (i + n == j) {    // single, assume nfc cp
+                int j = Grapheme.nextBoundary(seq, i, matcher.to);
+                if (i + n == j) { // single cp grapheme, assume nfc
                     if (predicate.is(ch0))
                         return next.match(matcher, j, seq);
                 } else {
@@ -4111,13 +4100,12 @@ loop:   for(int x=0, offset=0; x<nCodePoints; x++, offset+=len) {
                 endIndex = matcher.getTextLength();
             }
             if (i == startIndex) {
-                return next.match(matcher, i, seq);
-            }
-            if (i < endIndex) {
-                if (Character.isSurrogatePair(seq.charAt(i-1), seq.charAt(i)) ||
-                    Grapheme.nextBoundary(seq,
-                        i - Character.charCount(Character.codePointBefore(seq, i)),
-                        i + Character.charCount(Character.codePointAt(seq, i))) > i) {
+                // continue with return below
+            } else if (i < endIndex) {
+                if (Character.isSurrogatePair(seq.charAt(i - 1), seq.charAt(i))) {
+                    return false;
+                }
+                if (Grapheme.nextBoundary(seq, matcher.last, endIndex) > i) {
                     return false;
                 }
             } else {
@@ -4342,14 +4330,22 @@ loop:   for(int x=0, offset=0; x<nCodePoints; x++, offset+=len) {
             this.cmin = cmin;
         }
         boolean match(Matcher matcher, int i, CharSequence seq) {
+            int starti = i;
             int n = 0;
             int to = matcher.to;
             // greedy, all the way down
             while (i < to) {
                 int ch = Character.codePointAt(seq, i);
+                int len = Character.charCount(ch);
+                if (i + len > to) {
+                    // the region cut off the high half of a surrogate pair
+                    matcher.hitEnd = true;
+                    ch = seq.charAt(i);
+                    len = 1;
+                }
                 if (!predicate.is(ch))
-                   break;
-                i += Character.charCount(ch);
+                    break;
+                i += len;
                 n++;
             }
             if (i >= to) {
@@ -4360,9 +4356,10 @@ loop:   for(int x=0, offset=0; x<nCodePoints; x++, offset+=len) {
                     return true;
                 if (n == cmin)
                     return false;
-                 // backing off if match fails
+                // backing off if match fails
                 int ch = Character.codePointBefore(seq, i);
-                i -= Character.charCount(ch);
+                // check if the region cut off the low half of a surrogate pair
+                i = Math.max(starti, i - Character.charCount(ch));
                 n--;
             }
             return false;
@@ -5675,7 +5672,7 @@ NEXT:       while (i <= last) {
             return ch -> is(ch) || p.is(ch);
         }
         default CharPredicate union(CharPredicate p1,
-                                    CharPredicate p2 ) {
+                                    CharPredicate p2) {
             return ch -> is(ch) || p1.is(ch) || p2.is(ch);
         }
         default CharPredicate negate() {

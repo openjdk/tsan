@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1999, 2019, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 1999, 2020, Oracle and/or its affiliates. All rights reserved.
  * Copyright (c) 2014, Red Hat Inc. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
@@ -46,6 +46,7 @@
 #include "runtime/javaCalls.hpp"
 #include "runtime/mutexLocker.hpp"
 #include "runtime/osThread.hpp"
+#include "runtime/safepointMechanism.hpp"
 #include "runtime/sharedRuntime.hpp"
 #include "runtime/stubRoutines.hpp"
 #include "runtime/thread.inline.hpp"
@@ -293,7 +294,7 @@ JVM_handle_linux_signal(int sig,
     // Handle ALL stack overflow variations here
     if (sig == SIGSEGV) {
       // check if fault address is within thread stack
-      if (thread->on_local_stack(addr)) {
+      if (thread->is_in_full_stack(addr)) {
         // stack overflow
         if (thread->in_stack_yellow_reserved_zone(addr)) {
           if (thread->thread_state() == _thread_in_Java) {
@@ -364,7 +365,7 @@ JVM_handle_linux_signal(int sig,
           tty->print_cr("trap: zombie_not_entrant (%s)", (sig == SIGTRAP) ? "SIGTRAP" : "SIGILL");
         }
         stub = SharedRuntime::get_handle_wrong_method_stub();
-      } else if (sig == SIGSEGV && os::is_poll_address((address)info->si_addr)) {
+      } else if (sig == SIGSEGV && SafepointMechanism::is_poll_address((address)info->si_addr)) {
         stub = SharedRuntime::get_poll_stub(pc);
       } else if (sig == SIGBUS /* && info->si_code == BUS_OBJERR */) {
         // BugId 4454115: A read from a MappedByteBuffer can fault
@@ -380,6 +381,21 @@ JVM_handle_linux_signal(int sig,
           }
           stub = SharedRuntime::handle_unsafe_access(thread, next_pc);
         }
+      } else if (sig == SIGILL && nativeInstruction_at(pc)->is_stop()) {
+        // Pull a pointer to the error message out of the instruction
+        // stream.
+        const uint64_t *detail_msg_ptr
+          = (uint64_t*)(pc + NativeInstruction::instruction_size);
+        const char *detail_msg = (const char *)*detail_msg_ptr;
+        const char *msg = "stop";
+        if (TraceTraps) {
+          tty->print_cr("trap: %s: (SIGILL)", msg);
+        }
+
+        va_list detail_args;
+        VMError::report_and_die(INTERNAL_ERROR, msg, detail_msg, detail_args, thread,
+                                pc, info, ucVoid, NULL, 0, 0);
+        va_end(detail_args);
       }
       else
 
@@ -461,12 +477,6 @@ int os::Linux::get_fpu_control_word(void) {
 void os::Linux::set_fpu_control_word(int fpu_control) {
 }
 
-// Check that the linux kernel version is 2.4 or higher since earlier
-// versions do not support SSE without patches.
-bool os::supports_sse() {
-  return true;
-}
-
 bool os::is_allocatable(size_t bytes) {
   return true;
 }
@@ -510,7 +520,7 @@ void os::print_context(outputStream *st, const void *context) {
   // point to garbage if entry point in an nmethod is corrupted. Leave
   // this at the end, and hope for the best.
   address pc = os::Linux::ucontext_get_pc(uc);
-  print_instructions(st, pc, sizeof(char));
+  print_instructions(st, pc, 4/*native instruction size*/);
   st->cr();
 }
 

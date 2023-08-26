@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2002, 2019, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2002, 2020, Oracle and/or its affiliates. All rights reserved.
  * Copyright (c) 2012, 2015 SAP SE. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
@@ -267,7 +267,7 @@ inline address MacroAssembler::last_calls_return_pc() {
 
 // Read from the polling page, its address is already in a register.
 inline void MacroAssembler::load_from_polling_page(Register polling_page_address, int offset) {
-  if (SafepointMechanism::uses_thread_local_poll() && USE_POLL_BIT_ONLY) {
+  if (USE_POLL_BIT_ONLY) {
     int encoding = SafepointMechanism::poll_bit();
     tdi(traptoGreaterThanUnsigned | traptoEqual, polling_page_address, encoding);
   } else {
@@ -280,12 +280,6 @@ inline void MacroAssembler::load_from_polling_page(Register polling_page_address
 inline void MacroAssembler::trap_null_check(Register a, trap_to_bits cmp) {
   assert(TrapBasedNullChecks, "sanity");
   tdi(cmp, a/*reg a*/, 0);
-}
-inline void MacroAssembler::trap_zombie_not_entrant() {
-  tdi(traptoUnconditional, 0/*reg 0*/, 1);
-}
-inline void MacroAssembler::trap_should_not_reach_here() {
-  tdi_unchecked(traptoUnconditional, 0/*reg 0*/, 2);
 }
 
 inline void MacroAssembler::trap_ic_miss_check(Register a, Register b) {

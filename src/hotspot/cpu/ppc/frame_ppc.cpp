@@ -62,18 +62,15 @@ bool frame::safe_for_sender(JavaThread *thread) {
   }
 
   // Unextended sp must be within the stack
-  bool unextended_sp_safe = (unextended_sp < thread->stack_base());
-
-  if (!unextended_sp_safe) {
+  if (!thread->is_in_full_stack_checked(unextended_sp)) {
     return false;
   }
 
   // An fp must be within the stack and above (but not equal) sp.
-  bool fp_safe = (fp < thread->stack_base()) && (fp > sp);
+  bool fp_safe = thread->is_in_stack_range_excl(fp, sp);
   // An interpreter fp must be within the stack and above (but not equal) sp.
   // Moreover, it must be at least the size of the ijava_state structure.
-  bool fp_interp_safe = (fp < thread->stack_base()) && (fp > sp) &&
-    ((fp - sp) >= ijava_state_size);
+  bool fp_interp_safe = fp_safe && ((fp - sp) >= ijava_state_size);
 
   // We know sp/unextended_sp are safe, only fp is questionable here
 
@@ -132,7 +129,7 @@ bool frame::safe_for_sender(JavaThread *thread) {
 
     // sender_fp must be within the stack and above (but not
     // equal) current frame's fp.
-    if (sender_fp >= thread->stack_base() || sender_fp <= fp) {
+    if (!thread->is_in_stack_range_excl(sender_fp, fp)) {
         return false;
     }
 
@@ -250,12 +247,12 @@ frame frame::sender(RegisterMap* map) const {
 }
 
 void frame::patch_pc(Thread* thread, address pc) {
+  assert(_cb == CodeCache::find_blob(pc), "unexpected pc");
   if (TracePcPatching) {
     tty->print_cr("patch_pc at address " PTR_FORMAT " [" PTR_FORMAT " -> " PTR_FORMAT "]",
                   p2i(&((address*) _sp)[-1]), p2i(((address*) _sp)[-1]), p2i(pc));
   }
   own_abi()->lr = (uint64_t)pc;
-  _cb = CodeCache::find_blob(pc);
   if (_cb != NULL && _cb->is_nmethod() && ((nmethod*)_cb)->is_deopt_pc(_pc)) {
     address orig = (((nmethod*)_cb)->get_original_pc(this));
     assert(orig == _pc, "expected original to be stored before patching");
