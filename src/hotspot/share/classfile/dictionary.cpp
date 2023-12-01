@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2003, 2019, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2003, 2020, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -33,6 +33,7 @@
 #include "memory/metaspaceClosure.hpp"
 #include "memory/resourceArea.hpp"
 #include "oops/oop.inline.hpp"
+#include "oops/oopHandle.inline.hpp"
 #include "runtime/mutexLocker.hpp"
 #include "runtime/safepointVerifiers.hpp"
 #include "utilities/hashtable.inline.hpp"
@@ -354,6 +355,7 @@ bool Dictionary::is_valid_protection_domain(unsigned int hash,
 // since been unreferenced, so this entry should be cleared.
 void Dictionary::clean_cached_protection_domains() {
   assert_locked_or_safepoint(SystemDictionary_lock);
+  assert(!loader_data()->has_class_mirror_holder(), "cld should have a ClassLoader holder not a Class holder");
 
   if (loader_data()->is_the_null_class_loader_data()) {
     // Classes in the boot loader are not loaded with protection domains
@@ -399,6 +401,20 @@ void Dictionary::clean_cached_protection_domains() {
   }
 }
 
+oop SymbolPropertyEntry::method_type() const {
+  return _method_type.resolve();
+}
+
+void SymbolPropertyEntry::set_method_type(oop p) {
+  _method_type = OopHandle::create(p);
+}
+
+void SymbolPropertyEntry::free_entry() {
+  // decrement Symbol refcount here because hashtable doesn't.
+  literal()->decrement_refcount();
+  // Free OopHandle
+  _method_type.release();
+}
 
 SymbolPropertyTable::SymbolPropertyTable(int table_size)
   : Hashtable<Symbol*, mtSymbol>(table_size, sizeof(SymbolPropertyEntry))
@@ -435,16 +451,6 @@ SymbolPropertyEntry* SymbolPropertyTable::add_entry(int index, unsigned int hash
   return p;
 }
 
-void SymbolPropertyTable::oops_do(OopClosure* f) {
-  for (int index = 0; index < table_size(); index++) {
-    for (SymbolPropertyEntry* p = bucket(index); p != NULL; p = p->next()) {
-      if (p->method_type() != NULL) {
-        f->do_oop(p->method_type_addr());
-      }
-    }
-  }
-}
-
 void SymbolPropertyTable::methods_do(void f(Method*)) {
   for (int index = 0; index < table_size(); index++) {
     for (SymbolPropertyEntry* p = bucket(index); p != NULL; p = p->next()) {
@@ -454,6 +460,11 @@ void SymbolPropertyTable::methods_do(void f(Method*)) {
       }
     }
   }
+}
+
+void SymbolPropertyTable::free_entry(SymbolPropertyEntry* entry) {
+  entry->free_entry();
+  Hashtable<Symbol*, mtSymbol>::free_entry(entry);
 }
 
 void DictionaryEntry::verify_protection_domain_set() {
@@ -482,6 +493,7 @@ void Dictionary::print_on(outputStream* st) const {
   ResourceMark rm;
 
   assert(loader_data() != NULL, "loader data should not be null");
+  assert(!loader_data()->has_class_mirror_holder(), "cld should have a ClassLoader holder not a Class holder");
   st->print_cr("Java dictionary (table_size=%d, classes=%d, resizable=%s)",
                table_size(), number_of_entries(), BOOL_TO_STR(_resizable));
   st->print_cr("^ indicates that initiating loader is different from defining loader");

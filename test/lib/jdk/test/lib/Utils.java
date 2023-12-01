@@ -26,6 +26,8 @@ package jdk.test.lib;
 import java.io.File;
 import java.io.IOException;
 import java.lang.annotation.Annotation;
+import java.lang.reflect.Method;
+import java.net.Inet6Address;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.MalformedURLException;
@@ -45,6 +47,7 @@ import java.util.Collections;
 import java.util.Iterator;
 import java.util.Map;
 import java.util.HashMap;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.Objects;
 import java.util.Random;
@@ -110,6 +113,11 @@ public final class Utils {
     public static final String TEST_CLASSES = System.getProperty("test.classes", ".");
 
     /**
+     * Returns the value of 'test.name' system property
+     */
+    public static final String TEST_NAME = System.getProperty("test.name", ".");
+
+   /**
      * Defines property name for seed value.
      */
     public static final String SEED_PROPERTY_NAME = "jdk.test.lib.random.seed";
@@ -119,6 +127,11 @@ public final class Utils {
      * "jdk.test.lib.random.seed" property value.
      */
     private static volatile Random RANDOM_GENERATOR;
+
+    /**
+     * Maximum number of attempts to get free socket
+     */
+    private static final int MAX_SOCKET_TRIES = 10;
 
     /**
      * Contains the seed value used for {@link java.util.Random} creation.
@@ -303,6 +316,37 @@ public final class Utils {
     }
 
     /**
+     * Returns local addresses with symbolic and numeric scopes
+     */
+    public static List<InetAddress> getAddressesWithSymbolicAndNumericScopes() {
+        List<InetAddress> result = new LinkedList<>();
+        try {
+            NetworkConfiguration conf = NetworkConfiguration.probe();
+            conf.ip4Addresses().forEach(result::add);
+            // Java reports link local addresses with symbolic scope,
+            // but on Windows java.net.NetworkInterface generates its own scope names
+            // which are incompatible with native Windows routines.
+            // So on Windows test only addresses with numeric scope.
+            // On other platforms test both symbolic and numeric scopes.
+            conf.ip6Addresses().forEach(addr6 -> {
+                try {
+                    result.add(Inet6Address.getByAddress(null, addr6.getAddress(), addr6.getScopeId()));
+                } catch (UnknownHostException e) {
+                    // cannot happen!
+                    throw new RuntimeException("Unexpected", e);
+                }
+                if (!Platform.isWindows()) {
+                    result.add(addr6);
+                }
+            });
+        } catch (IOException e) {
+            // cannot happen!
+            throw new RuntimeException("Unexpected", e);
+        }
+        return result;
+    }
+
+    /**
      * Returns the free port on the local host.
      *
      * @return The port number
@@ -313,6 +357,37 @@ public final class Utils {
                 new ServerSocket(0, 5, InetAddress.getLoopbackAddress());) {
             return serverSocket.getLocalPort();
         }
+    }
+
+    /**
+     * Returns the free unreserved port on the local host.
+     *
+     * @param reservedPorts reserved ports
+     * @return The port number or -1 if failed to find a free port
+     */
+    public static int findUnreservedFreePort(int... reservedPorts) {
+        int numTries = 0;
+        while (numTries++ < MAX_SOCKET_TRIES) {
+            int port = -1;
+            try {
+                port = getFreePort();
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+            if (port > 0 && !isReserved(port, reservedPorts)) {
+                return port;
+            }
+        }
+        return -1;
+    }
+
+    private static boolean isReserved(int port, int[] reservedPorts) {
+        for (int p : reservedPorts) {
+            if (p == port) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**
@@ -752,59 +827,6 @@ public final class Utils {
         } catch (Throwable t) {
             throw new RuntimeException("Failed to determine distro.", t);
         }
-    }
-
-    // This method is intended to be called from a jtreg test.
-    // It will identify the name of the test by means of stack walking.
-    // It can handle both jtreg tests and a testng tests wrapped inside jtreg tests.
-    // For jtreg tests the name of the test will be searched by stack-walking
-    // until the method main() is found; the class containing that method is the
-    // main test class and will be returned as the name of the test.
-    // Special handling is used for testng tests.
-    @SuppressWarnings("unchecked")
-    public static String getTestName() {
-        String result = null;
-        // If we are using testng, then we should be able to load the "Test" annotation.
-        Class<? extends Annotation> testClassAnnotation;
-
-        try {
-            testClassAnnotation = (Class<? extends Annotation>)Class.forName("org.testng.annotations.Test");
-        } catch (ClassNotFoundException e) {
-            testClassAnnotation = null;
-        }
-
-        StackTraceElement[] elms = (new Throwable()).getStackTrace();
-        for (StackTraceElement n: elms) {
-            String className = n.getClassName();
-
-            // If this is a "main" method, then use its class name, but only
-            // if we are not using testng.
-            if (testClassAnnotation == null && "main".equals(n.getMethodName())) {
-                result = className;
-                break;
-            }
-
-            // If this is a testng test, the test will have no "main" method. We can
-            // detect a testng test class by looking for the org.testng.annotations.Test
-            // annotation. If present, then use the name of this class.
-            if (testClassAnnotation != null) {
-                try {
-                    Class<?> c = Class.forName(className);
-                    if (c.isAnnotationPresent(testClassAnnotation)) {
-                        result = className;
-                        break;
-                    }
-                } catch (ClassNotFoundException e) {
-                    throw new RuntimeException("Unexpected exception: " + e, e);
-                }
-            }
-        }
-
-        if (result == null) {
-            throw new RuntimeException("Couldn't find main test class in stack trace");
-        }
-
-        return result;
     }
 
     /**

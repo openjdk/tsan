@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013, 2019, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2013, 2020, Oracle and/or its affiliates. All rights reserved.
  * Copyright (c) 2018, Red Hat Inc. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
@@ -56,6 +56,7 @@ import static org.graalvm.compiler.asm.aarch64.AArch64Assembler.Instruction.CSIN
 import static org.graalvm.compiler.asm.aarch64.AArch64Assembler.Instruction.CSNEG;
 import static org.graalvm.compiler.asm.aarch64.AArch64Assembler.Instruction.DC;
 import static org.graalvm.compiler.asm.aarch64.AArch64Assembler.Instruction.DMB;
+import static org.graalvm.compiler.asm.aarch64.AArch64Assembler.Instruction.DSB;
 import static org.graalvm.compiler.asm.aarch64.AArch64Assembler.Instruction.EON;
 import static org.graalvm.compiler.asm.aarch64.AArch64Assembler.Instruction.EOR;
 import static org.graalvm.compiler.asm.aarch64.AArch64Assembler.Instruction.EXTR;
@@ -82,6 +83,7 @@ import static org.graalvm.compiler.asm.aarch64.AArch64Assembler.Instruction.FSQR
 import static org.graalvm.compiler.asm.aarch64.AArch64Assembler.Instruction.FSUB;
 import static org.graalvm.compiler.asm.aarch64.AArch64Assembler.Instruction.HINT;
 import static org.graalvm.compiler.asm.aarch64.AArch64Assembler.Instruction.HLT;
+import static org.graalvm.compiler.asm.aarch64.AArch64Assembler.Instruction.ISB;
 import static org.graalvm.compiler.asm.aarch64.AArch64Assembler.Instruction.LDADD;
 import static org.graalvm.compiler.asm.aarch64.AArch64Assembler.Instruction.LDAR;
 import static org.graalvm.compiler.asm.aarch64.AArch64Assembler.Instruction.LDAXR;
@@ -672,10 +674,12 @@ public abstract class AArch64Assembler extends Assembler {
         CLREX(0xd5033f5f),
         HINT(0xD503201F),
         DMB(0x000000A0),
+        DSB(0x00000080),
 
         MRS(0xD5300000),
         MSR(0xD5100000),
         DC(0xD5087000),
+        ISB(0x000000C0),
 
         BLR_NATIVE(0xc0000000),
 
@@ -1400,7 +1404,7 @@ public abstract class AArch64Assembler extends Assembler {
      * @param rt general purpose register. May not be null or stackpointer.
      * @param rn general purpose register.
      */
-    protected void ldar(int size, Register rt, Register rn) {
+    public void ldar(int size, Register rt, Register rn) {
         assert size == 8 || size == 16 || size == 32 || size == 64;
         int transferSize = NumUtil.log2Ceil(size / 8);
         exclusiveLoadInstruction(LDAR, rt, rn, transferSize);
@@ -1413,7 +1417,7 @@ public abstract class AArch64Assembler extends Assembler {
      * @param rt general purpose register. May not be null or stackpointer.
      * @param rn general purpose register.
      */
-    protected void stlr(int size, Register rt, Register rn) {
+    public void stlr(int size, Register rt, Register rn) {
         assert size == 8 || size == 16 || size == 32 || size == 64;
         int transferSize = NumUtil.log2Ceil(size / 8);
         // Hack: Passing the zero-register means it is ignored when building the encoding.
@@ -1469,7 +1473,7 @@ public abstract class AArch64Assembler extends Assembler {
      */
     private void exclusiveStoreInstruction(Instruction instr, Register rs, Register rt, Register rn, int log2TransferSize) {
         assert log2TransferSize >= 0 && log2TransferSize < 4;
-        assert rt.getRegisterCategory().equals(CPU) && rs.getRegisterCategory().equals(CPU) && !rs.equals(rt);
+        assert rt.getRegisterCategory().equals(CPU) && rs.getRegisterCategory().equals(CPU) && (instr == STLR || !rs.equals(rt));
         int transferSizeEncoding = log2TransferSize << LoadStoreTransferSizeOffset;
         emitInt(transferSizeEncoding | instr.encoding | rs2(rs) | rn(rn) | rt(rt));
     }
@@ -1990,7 +1994,7 @@ public abstract class AArch64Assembler extends Assembler {
      * @param extendType defines how src2 is extended to the same size as src1.
      * @param shiftAmt must be in range 0 to 4.
      */
-    protected void sub(int size, Register dst, Register src1, Register src2, ExtendType extendType, int shiftAmt) {
+    public void sub(int size, Register dst, Register src1, Register src2, ExtendType extendType, int shiftAmt) {
         assert !dst.equals(zr);
         assert !src1.equals(zr);
         assert !src2.equals(sp);
@@ -2178,14 +2182,14 @@ public abstract class AArch64Assembler extends Assembler {
     }
 
     /**
-     * dst = rotateRight(src1, (src2 & log2(size))).
+     * dst = rotateRight(src1, (src2 & (size - 1))).
      *
      * @param size register size. Has to be 32 or 64.
      * @param dst general purpose register. May not be null or stackpointer.
      * @param src1 general purpose register. May not be null or stackpointer.
      * @param src2 general purpose register. May not be null or stackpointer.
      */
-    protected void ror(int size, Register dst, Register src1, Register src2) {
+    protected void rorv(int size, Register dst, Register src1, Register src2) {
         dataProcessing2SourceOp(RORV, dst, src1, src2, generalFromSize(size));
     }
 
@@ -2989,7 +2993,8 @@ public abstract class AArch64Assembler extends Assembler {
         LOAD_LOAD(0x9, "ISHLD"),
         LOAD_STORE(0x9, "ISHLD"),
         STORE_STORE(0xA, "ISHST"),
-        ANY_ANY(0xB, "ISH");
+        ANY_ANY(0xB, "ISH"),
+        SYSTEM(0xF, "SYS");
 
         public final int encoding;
         public final String optionName;
@@ -3007,6 +3012,22 @@ public abstract class AArch64Assembler extends Assembler {
      */
     public void dmb(BarrierKind barrierKind) {
         emitInt(DMB.encoding | BarrierOp | barrierKind.encoding << BarrierKindOffset);
+    }
+
+    /**
+     * Data Synchronization Barrier.
+     *
+     * @param barrierKind barrier that is issued. May not be null.
+     */
+    public void dsb(BarrierKind barrierKind) {
+        emitInt(DSB.encoding | BarrierOp | barrierKind.encoding << BarrierKindOffset);
+    }
+
+    /**
+     * Instruction Synchronization Barrier.
+     */
+    public void isb() {
+        emitInt(ISB.encoding | BarrierOp | BarrierKind.SYSTEM.encoding << BarrierKindOffset);
     }
 
     public void mrs(Register dst, SystemRegister systemRegister) {
@@ -3027,13 +3048,56 @@ public abstract class AArch64Assembler extends Assembler {
         }
     }
 
-    void annotateImmediateMovSequence(int pos, int numInstrs) {
-        if (codePatchingAnnotationConsumer != null) {
-            codePatchingAnnotationConsumer.accept(new MovSequenceAnnotation(pos, numInstrs));
+    public abstract static class PatchableCodeAnnotation extends CodeAnnotation {
+
+        PatchableCodeAnnotation(int instructionStartPosition) {
+            super(instructionStartPosition);
+        }
+
+        abstract void patch(int codePos, int relative, byte[] code);
+    }
+
+    /**
+     * Contains methods used for patching instruction(s) within AArch64.
+     */
+    public static class PatcherUtil {
+        /**
+         * Method to patch a series a bytes within a byte address with a given value.
+         *
+         * @param code the array of bytes in which patch is to be performed
+         * @param codePos where in the array the patch should be performed
+         * @param value the value to be added to the series of bytes
+         * @param bitsUsed the number of bits to patch within each byte
+         * @param offsets where with the bytes the value should be added
+         */
+        public static void writeBitSequence(byte[] code, int codePos, int value, int[] bitsUsed, int[] offsets) {
+            assert bitsUsed.length == offsets.length : "bitsUsed and offsets parameter arrays do not match";
+            int curValue = value;
+            for (int i = 0; i < bitsUsed.length; i++) {
+                int usedBits = bitsUsed[i];
+                if (usedBits == 0) {
+                    continue;
+                }
+
+                int offset = offsets[i];
+                int mask = (1 << usedBits) - 1;
+
+                byte patchTarget = code[codePos + i];
+                byte patch = (byte) (((curValue & mask) << offset) & 0xFF);
+                byte retainedPatchTarget = (byte) (patchTarget & ((~(mask << offset)) & 0xFF));
+                patchTarget = (byte) (retainedPatchTarget | patch);
+                code[codePos + i] = patchTarget;
+                curValue = curValue >> usedBits;
+            }
+        }
+
+        public static int computeRelativePageDifference(int target, int curPos, int pageSize) {
+            int relative = target / pageSize - curPos / pageSize;
+            return relative;
         }
     }
 
-    public static class SingleInstructionAnnotation extends CodeAnnotation {
+    public static class SingleInstructionAnnotation extends PatchableCodeAnnotation {
 
         /**
          * The size of the operand, in bytes.
@@ -3050,18 +3114,44 @@ public abstract class AArch64Assembler extends Assembler {
             this.shift = shift;
             this.instruction = instruction;
         }
-    }
 
-    public static class MovSequenceAnnotation extends CodeAnnotation {
+        @Override
+        public String toString() {
+            return "SINGLE_INSTRUCTION";
+        }
 
-        /**
-         * The size of the operand, in bytes.
-         */
-        public final int numInstrs;
+        @Override
+        public void patch(int codePos, int relative, byte[] code) {
+            int curValue = relative;
+            assert (curValue & ((1 << shift) - 1)) == 0 : "relative offset has incorrect alignment";
+            curValue = curValue >> shift;
 
-        MovSequenceAnnotation(int instructionPosition, int numInstrs) {
-            super(instructionPosition);
-            this.numInstrs = numInstrs;
+            // right this is only BL instructions are being patched here
+            assert instruction == AArch64Assembler.Instruction.BL : "trying to patch an unexpected instruction";
+            GraalError.guarantee(NumUtil.isSignedNbit(operandSizeBits, curValue), "value too large to fit into space");
+
+            // fill in immediate operand of operandSizeBits starting at offsetBits within
+            // instruction
+            int bitsRemaining = operandSizeBits;
+            int offsetRemaining = offsetBits;
+
+            int[] bitsUsed = new int[4];
+            int[] offsets = new int[4];
+
+            for (int i = 0; i < 4; ++i) {
+                if (offsetRemaining >= 8) {
+                    offsetRemaining -= 8;
+                    continue;
+                }
+                offsets[i] = offsetRemaining;
+                // number of bits to be filled within this byte
+                int bits = Math.min(8 - offsetRemaining, bitsRemaining);
+                bitsUsed[i] = bits;
+                bitsRemaining -= bits;
+
+                offsetRemaining = 0;
+            }
+            PatcherUtil.writeBitSequence(code, instructionPosition, curValue, bitsUsed, offsets);
         }
     }
 

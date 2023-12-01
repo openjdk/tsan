@@ -41,6 +41,7 @@
 #include "runtime/mutexLocker.hpp"
 #include "runtime/os.hpp"
 #include "runtime/safepoint.hpp"
+#include "runtime/synchronizer.hpp"
 #include "runtime/thread.inline.hpp"
 #include "runtime/vmThread.hpp"
 #include "runtime/vmOperations.hpp"
@@ -283,6 +284,14 @@ void VMThread::run() {
     assert(should_terminate(), "termination flag must be set");
   }
 
+  if (AsyncDeflateIdleMonitors && log_is_enabled(Info, monitorinflation)) {
+    // AsyncDeflateIdleMonitors does a special deflation at the final
+    // safepoint in order to reduce the in-use monitor population that
+    // is reported by ObjectSynchronizer::log_in_use_monitor_details()
+    // at VM exit.
+    ObjectSynchronizer::set_is_special_deflation_requested(true);
+  }
+
   // 4526887 let VM thread exit at Safepoint
   _cur_vm_operation = &halt_op;
   SafepointSynchronize::begin();
@@ -400,11 +409,6 @@ class HandshakeALotClosure : public HandshakeClosure {
   }
 };
 
-void VMThread::check_for_forced_cleanup() {
-  MonitorLocker mq(VMOperationQueue_lock,  Mutex::_no_safepoint_check_flag);
-  mq.notify();
-}
-
 VM_Operation* VMThread::no_op_safepoint() {
   // Check for handshakes first since we may need to return a VMop.
   if (HandshakeALot) {
@@ -415,8 +419,7 @@ VM_Operation* VMThread::no_op_safepoint() {
   long interval_ms = SafepointTracing::time_since_last_safepoint_ms();
   bool max_time_exceeded = GuaranteedSafepointInterval != 0 &&
                            (interval_ms >= GuaranteedSafepointInterval);
-  if ((max_time_exceeded && SafepointSynchronize::is_cleanup_needed()) ||
-      SafepointSynchronize::is_forced_cleanup_needed()) {
+  if (max_time_exceeded && SafepointSynchronize::is_cleanup_needed()) {
     return &cleanup_op;
   }
   if (SafepointALot) {

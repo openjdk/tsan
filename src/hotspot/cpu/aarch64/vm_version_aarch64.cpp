@@ -1,6 +1,6 @@
 /*
- * Copyright (c) 1997, 2019, Oracle and/or its affiliates. All rights reserved.
- * Copyright (c) 2015, 2019, Red Hat Inc. All rights reserved.
+ * Copyright (c) 1997, 2020, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2015, 2020, Red Hat Inc. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -220,7 +220,7 @@ void VM_Version::get_processor_features() {
 
   // ThunderX
   if (_cpu == CPU_CAVIUM && (_model == 0xA1)) {
-    if (_variant == 0) _features |= CPU_DMB_ATOMICS;
+    guarantee(_variant != 0, "Pre-release hardware no longer supported.");
     if (FLAG_IS_DEFAULT(AvoidUnalignedAccesses)) {
       FLAG_SET_DEFAULT(AvoidUnalignedAccesses, true);
     }
@@ -327,11 +327,11 @@ void VM_Version::get_processor_features() {
     }
   } else {
     if (UseAES) {
-      warning("UseAES specified, but not supported on this CPU");
+      warning("AES instructions are not available on this CPU");
       FLAG_SET_DEFAULT(UseAES, false);
     }
     if (UseAESIntrinsics) {
-      warning("UseAESIntrinsics specified, but not supported on this CPU");
+      warning("AES intrinsics are not available on this CPU");
       FLAG_SET_DEFAULT(UseAESIntrinsics, false);
     }
   }
@@ -420,11 +420,12 @@ void VM_Version::get_processor_features() {
     FLAG_SET_DEFAULT(UseUnalignedAccesses, true);
   }
 
-  if (FLAG_IS_DEFAULT(UseBarriersForVolatile)) {
-    UseBarriersForVolatile = (_features & CPU_DMB_ATOMICS) != 0;
+  if (FLAG_IS_DEFAULT(UsePopCountInstruction)) {
+    FLAG_SET_DEFAULT(UsePopCountInstruction, true);
   }
 
-  if (FLAG_IS_DEFAULT(UsePopCountInstruction)) {
+  if (!UsePopCountInstruction) {
+    warning("UsePopCountInstruction is always enabled on this CPU");
     UsePopCountInstruction = true;
   }
 
@@ -450,6 +451,10 @@ void VM_Version::get_processor_features() {
 
   if (FLAG_IS_DEFAULT(OptoScheduling)) {
     OptoScheduling = true;
+  }
+
+  if (FLAG_IS_DEFAULT(AlignVector)) {
+    AlignVector = AvoidUnalignedAccesses;
   }
 #endif
 }

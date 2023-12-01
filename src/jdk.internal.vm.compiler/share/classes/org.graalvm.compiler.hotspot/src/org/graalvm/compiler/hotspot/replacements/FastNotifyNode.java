@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2019, 2020, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -36,13 +36,12 @@ import org.graalvm.compiler.nodes.DeoptimizingNode;
 import org.graalvm.compiler.nodes.FrameState;
 import org.graalvm.compiler.nodes.ValueNode;
 import org.graalvm.compiler.nodes.memory.AbstractMemoryCheckpoint;
-import org.graalvm.compiler.nodes.memory.MemoryCheckpoint;
+import org.graalvm.compiler.nodes.memory.SingleMemoryKill;
 import org.graalvm.compiler.nodes.spi.Lowerable;
-import org.graalvm.compiler.nodes.spi.LoweringTool;
 import jdk.internal.vm.compiler.word.LocationIdentity;
 
 @NodeInfo(cycles = CYCLES_2, size = SIZE_0, allowedUsageTypes = Memory)
-public class FastNotifyNode extends AbstractMemoryCheckpoint implements Lowerable, MemoryCheckpoint.Single, DeoptimizingNode.DeoptDuring {
+public class FastNotifyNode extends AbstractMemoryCheckpoint implements Lowerable, SingleMemoryKill, DeoptimizingNode.DeoptDuring {
 
     public static final NodeClass<FastNotifyNode> TYPE = NodeClass.create(FastNotifyNode.class);
     private final boolean notifyAll;
@@ -58,11 +57,6 @@ public class FastNotifyNode extends AbstractMemoryCheckpoint implements Lowerabl
         this.object = object;
         this.notifyAll = notifyAll;
         this.bci = bci;
-    }
-
-    @Override
-    public void lower(LoweringTool tool) {
-        tool.getLowerer().lower(this, tool);
     }
 
     public boolean isNotifyAll() {

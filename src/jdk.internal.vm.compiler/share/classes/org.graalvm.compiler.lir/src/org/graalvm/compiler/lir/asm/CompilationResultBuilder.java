@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013, 2019, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2013, 2020, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -70,11 +70,11 @@ import jdk.vm.ci.code.DebugInfo;
 import jdk.vm.ci.code.Register;
 import jdk.vm.ci.code.StackSlot;
 import jdk.vm.ci.code.TargetDescription;
+import jdk.vm.ci.code.site.Call;
 import jdk.vm.ci.code.site.ConstantReference;
 import jdk.vm.ci.code.site.DataSectionReference;
 import jdk.vm.ci.code.site.Infopoint;
 import jdk.vm.ci.code.site.InfopointReason;
-import jdk.vm.ci.code.site.Mark;
 import jdk.vm.ci.meta.Constant;
 import jdk.vm.ci.meta.InvokeTarget;
 import jdk.vm.ci.meta.JavaConstant;
@@ -246,8 +246,12 @@ public class CompilationResultBuilder {
         compilationResult.setMaxInterpreterFrameSize(maxInterpreterFrameSize);
     }
 
-    public Mark recordMark(Object id) {
-        return compilationResult.recordMark(asm.position(), id);
+    public CompilationResult.CodeMark recordMark(CompilationResult.MarkId id) {
+        CompilationResult.CodeMark mark = compilationResult.recordMark(asm.position(), id);
+        if (currentCallContext != null) {
+            currentCallContext.recordMark(mark);
+        }
+        return mark;
     }
 
     public void blockComment(String s) {
@@ -308,7 +312,10 @@ public class CompilationResultBuilder {
 
     public void recordDirectCall(int posBefore, int posAfter, InvokeTarget callTarget, LIRFrameState info) {
         DebugInfo debugInfo = info != null ? info.debugInfo() : null;
-        compilationResult.recordCall(posBefore, posAfter - posBefore, callTarget, debugInfo, true);
+        Call call = compilationResult.recordCall(posBefore, posAfter - posBefore, callTarget, debugInfo, true);
+        if (currentCallContext != null) {
+            currentCallContext.recordCall(call);
+        }
     }
 
     public void recordIndirectCall(int posBefore, int posAfter, InvokeTarget callTarget, LIRFrameState info) {
@@ -389,35 +396,6 @@ public class CompilationResultBuilder {
             debug.log("Data reference in code: pos = %d, data = %s", asm.position(), Arrays.toString(data));
         }
         return recordDataSectionReference(new RawData(data, alignment));
-    }
-
-    /**
-     * Notifies this object of a branch instruction at offset {@code pcOffset} in the code.
-     *
-     * @param isNegated negation status of the branch's condition.
-     */
-    @SuppressWarnings("unused")
-    public void recordBranch(int pcOffset, boolean isNegated) {
-    }
-
-    /**
-     * Notifies this object of a call instruction belonging to an INVOKEVIRTUAL or INVOKEINTERFACE
-     * at offset {@code pcOffset} in the code.
-     *
-     * @param nodeSourcePosition source position of the corresponding invoke.
-     */
-    @SuppressWarnings("unused")
-    public void recordInvokeVirtualOrInterfaceCallOp(int pcOffset, NodeSourcePosition nodeSourcePosition) {
-    }
-
-    /**
-     * Notifies this object of a call instruction belonging to an INLINE_INVOKE at offset
-     * {@code pcOffset} in the code.
-     *
-     * @param nodeSourcePosition source position of the corresponding invoke.
-     */
-    @SuppressWarnings("unused")
-    public void recordInlineInvokeCallOp(int pcOffset, NodeSourcePosition nodeSourcePosition) {
     }
 
     /**
@@ -608,7 +586,7 @@ public class CompilationResultBuilder {
                     if (codeAnnotation instanceof JumpTable) {
                         // Skip jump table. Here we assume the jump table is at the tail of the
                         // emitted code.
-                        int jumpTableStart = codeAnnotation.position;
+                        int jumpTableStart = codeAnnotation.getPosition();
                         if (jumpTableStart >= start && jumpTableStart < end) {
                             end = jumpTableStart;
                         }
@@ -716,5 +694,39 @@ public class CompilationResultBuilder {
             }
         }
         return false;
+    }
+
+    private CallContext currentCallContext;
+
+    public final class CallContext implements AutoCloseable {
+        private CompilationResult.CodeMark mark;
+        private Call call;
+
+        @Override
+        public void close() {
+            currentCallContext = null;
+            compilationResult.recordCallContext(mark, call);
+        }
+
+        void recordCall(Call c) {
+            assert this.call == null : "Recording call twice";
+            this.call = c;
+        }
+
+        void recordMark(CompilationResult.CodeMark m) {
+            assert this.mark == null : "Recording mark twice";
+            this.mark = m;
+        }
+    }
+
+    public CallContext openCallContext(boolean direct) {
+        if (currentCallContext != null) {
+            throw GraalError.shouldNotReachHere("Call context already open");
+        }
+        // Currently only AOT requires call context information and only for direct calls.
+        if (compilationResult.isImmutablePIC() && direct) {
+            currentCallContext = new CallContext();
+        }
+        return currentCallContext;
     }
 }

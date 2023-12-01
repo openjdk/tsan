@@ -38,6 +38,7 @@ import jdk.javadoc.internal.doclets.toolkit.AbstractDoclet;
 import jdk.javadoc.internal.doclets.toolkit.DocletException;
 import jdk.javadoc.internal.doclets.toolkit.Messages;
 import jdk.javadoc.internal.doclets.toolkit.builders.AbstractBuilder;
+import jdk.javadoc.internal.doclets.toolkit.builders.BuilderFactory;
 import jdk.javadoc.internal.doclets.toolkit.util.ClassTree;
 import jdk.javadoc.internal.doclets.toolkit.util.DocFile;
 import jdk.javadoc.internal.doclets.toolkit.util.DocFileIOException;
@@ -169,7 +170,6 @@ public class HtmlDoclet extends AbstractDoclet {
 
         if (options.createIndex()) {
             IndexBuilder indexBuilder = new IndexBuilder(configuration, nodeprecated);
-            configuration.buildSearchTagIndex();
             if (options.splitIndex()) {
                 SplitIndexWriter.generate(configuration, indexBuilder);
             } else {
@@ -211,18 +211,18 @@ public class HtmlDoclet extends AbstractDoclet {
             f = DocFile.createFileForOutput(configuration, DocPaths.RESOURCES.resolve(DocPaths.X_IMG));
             f.copyResource(DOCLET_RESOURCES.resolve(DocPaths.X_IMG), true, false);
             copyJqueryFiles();
+
+            f = DocFile.createFileForOutput(configuration, DocPaths.JQUERY_OVERRIDES_CSS);
+            f.copyResource(DOCLET_RESOURCES.resolve(DocPaths.JQUERY_OVERRIDES_CSS), true, true);
         }
     }
 
     private void copyJqueryFiles() throws DocletException {
         List<String> files = Arrays.asList(
-                "jquery-3.4.1.js",
-                "jquery-ui.js",
-                "jquery-ui.css",
+                "jquery-3.5.1.min.js",
                 "jquery-ui.min.js",
                 "jquery-ui.min.css",
                 "jquery-ui.structure.min.css",
-                "jquery-ui.structure.css",
                 "images/ui-bg_glass_65_dadada_1x400.png",
                 "images/ui-icons_454545_256x240.png",
                 "images/ui-bg_glass_95_fef1ec_1x400.png",
@@ -245,21 +245,13 @@ public class HtmlDoclet extends AbstractDoclet {
     @Override // defined by AbstractDoclet
     protected void generateClassFiles(SortedSet<TypeElement> typeElems, ClassTree classTree)
             throws DocletException {
+        BuilderFactory f = configuration.getBuilderFactory();
         for (TypeElement te : typeElems) {
             if (utils.hasHiddenTag(te) ||
                     !(configuration.isGeneratedDoc(te) && utils.isIncluded(te))) {
                 continue;
             }
-            if (utils.isAnnotationType(te)) {
-                AbstractBuilder annotationTypeBuilder =
-                    configuration.getBuilderFactory()
-                        .getAnnotationTypeBuilder(te);
-                annotationTypeBuilder.build();
-            } else {
-                AbstractBuilder classBuilder =
-                    configuration.getBuilderFactory().getClassBuilder(te, classTree);
-                classBuilder.build();
-            }
+            f.getClassBuilder(te, classTree).build();
         }
     }
 

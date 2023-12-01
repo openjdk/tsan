@@ -25,8 +25,7 @@
 /*
  * @test TestPauseNotifications
  * @summary Check that MX notifications are reported for all cycles
- * @key gc
- * @requires vm.gc.Shenandoah & !vm.graal.enabled
+ * @requires vm.gc.Shenandoah
  *
  * @run main/othervm -Xmx128m -XX:+UnlockDiagnosticVMOptions -XX:+UnlockExperimentalVMOptions
  *      -XX:+UseShenandoahGC -XX:ShenandoahGCMode=passive
@@ -42,8 +41,7 @@
 /*
  * @test TestPauseNotifications
  * @summary Check that MX notifications are reported for all cycles
- * @key gc
- * @requires vm.gc.Shenandoah & !vm.graal.enabled
+ * @requires vm.gc.Shenandoah
  *
  * @run main/othervm -Xmx128m -XX:+UnlockDiagnosticVMOptions -XX:+UnlockExperimentalVMOptions
  *      -XX:+UseShenandoahGC -XX:ShenandoahGCHeuristics=aggressive
@@ -65,15 +63,14 @@
 /*
  * @test TestPauseNotifications
  * @summary Check that MX notifications are reported for all cycles
- * @key gc
- * @requires vm.gc.Shenandoah & !vm.graal.enabled
+ * @requires vm.gc.Shenandoah
  *
  * @run main/othervm -Xmx128m -XX:+UnlockDiagnosticVMOptions -XX:+UnlockExperimentalVMOptions
- *      -XX:+UseShenandoahGC -XX:ShenandoahGCMode=traversal -XX:ShenandoahGCHeuristics=aggressive
+ *      -XX:+UseShenandoahGC -XX:ShenandoahGCMode=iu -XX:ShenandoahGCHeuristics=aggressive
  *      TestPauseNotifications
  *
  * @run main/othervm -Xmx128m -XX:+UnlockDiagnosticVMOptions -XX:+UnlockExperimentalVMOptions
- *      -XX:+UseShenandoahGC -XX:ShenandoahGCMode=traversal
+ *      -XX:+UseShenandoahGC -XX:ShenandoahGCMode=iu
  *      TestPauseNotifications
  */
 

@@ -47,6 +47,7 @@ import jdk.javadoc.doclet.Taglet;
 import jdk.javadoc.internal.doclets.formats.html.HtmlDoclet;
 import jdk.javadoc.internal.doclets.toolkit.builders.BuilderFactory;
 import jdk.javadoc.internal.doclets.toolkit.taglets.TagletManager;
+import jdk.javadoc.internal.doclets.toolkit.util.Comparators;
 import jdk.javadoc.internal.doclets.toolkit.util.DocFile;
 import jdk.javadoc.internal.doclets.toolkit.util.DocFileFactory;
 import jdk.javadoc.internal.doclets.toolkit.util.DocFileIOException;
@@ -95,11 +96,6 @@ public abstract class BaseConfiguration {
      * The default path to the builder XML.
      */
     public static final String DEFAULT_BUILDER_XML = "resources/doclet.xml";
-
-    /**
-     * Maintain backward compatibility with previous javadoc version
-     */
-    public boolean backwardCompatibility = true;
 
     /**
      * The meta tag keywords instance.
@@ -155,11 +151,11 @@ public abstract class BaseConfiguration {
     public abstract Resources getDocResources();
 
     /**
-     * Returns a string identifying the version of the doclet.
+     * Returns the version of the {@link #doclet doclet}.
      *
-     * @return a version string
+     * @return the version
      */
-    public abstract String getDocletVersion();
+    public abstract Runtime.Version getDocletVersion();
 
     /**
      * This method should be defined in all those doclets (configurations),
@@ -308,16 +304,17 @@ public abstract class BaseConfiguration {
     }
 
     private void initModules() {
+        Comparators comparators = utils.comparators;
         // Build the modules structure used by the doclet
-        modules = new TreeSet<>(utils.makeModuleComparator());
+        modules = new TreeSet<>(comparators.makeModuleComparator());
         modules.addAll(getSpecifiedModuleElements());
 
-        modulePackages = new TreeMap<>(utils.makeModuleComparator());
+        modulePackages = new TreeMap<>(comparators.makeModuleComparator());
         for (PackageElement p : packages) {
             ModuleElement mdle = docEnv.getElementUtils().getModuleOf(p);
             if (mdle != null && !mdle.isUnnamed()) {
                 Set<PackageElement> s = modulePackages
-                        .computeIfAbsent(mdle, m -> new TreeSet<>(utils.makePackageComparator()));
+                        .computeIfAbsent(mdle, m -> new TreeSet<>(comparators.makePackageComparator()));
                 s.add(p);
             }
         }
@@ -326,7 +323,7 @@ public abstract class BaseConfiguration {
             ModuleElement mdle = docEnv.getElementUtils().getModuleOf(p);
             if (mdle != null && !mdle.isUnnamed()) {
                 Set<PackageElement> s = modulePackages
-                        .computeIfAbsent(mdle, m -> new TreeSet<>(utils.makePackageComparator()));
+                        .computeIfAbsent(mdle, m -> new TreeSet<>(comparators.makePackageComparator()));
                 s.add(p);
             }
         }
@@ -342,7 +339,7 @@ public abstract class BaseConfiguration {
     }
 
     private void initPackages() {
-        packages = new TreeSet<>(utils.makePackageComparator());
+        packages = new TreeSet<>(utils.comparators.makePackageComparator());
         // add all the included packages
         packages.addAll(includedPackageElements);
     }

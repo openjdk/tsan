@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016, 2019, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2016, 2020, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -47,7 +47,7 @@ class G1Analytics: public CHeapObj<mtGC> {
 
   TruncatedSeq* _rs_length_diff_seq;
   TruncatedSeq* _concurrent_refine_rate_ms_seq;
-  TruncatedSeq* _logged_cards_rate_ms_seq;
+  TruncatedSeq* _dirtied_cards_rate_ms_seq;
   // The ratio between the number of merged cards and actually scanned cards, for
   // young-only and mixed gcs.
   TruncatedSeq* _young_card_merge_to_scan_ratio_seq;
@@ -75,10 +75,10 @@ class G1Analytics: public CHeapObj<mtGC> {
   // Statistics kept per GC stoppage, pause or full.
   TruncatedSeq* _recent_prev_end_times_for_all_gcs_sec;
 
-  // The ratio of gc time to elapsed time, computed over recent pauses,
-  // and the ratio for just the last pause.
-  double _recent_avg_pause_time_ratio;
-  double _last_pause_time_ratio;
+  // Cached values for long and short term pause time ratios. See
+  // compute_pause_time_ratios() for how they are computed.
+  double _long_term_pause_time_ratio;
+  double _short_term_pause_time_ratio;
 
   // Returns whether the sequence have enough samples to get a "good" prediction.
   // The constant used is random but "small".
@@ -95,12 +95,12 @@ public:
     return _prev_collection_pause_end_ms;
   }
 
-  double recent_avg_pause_time_ratio() const {
-    return _recent_avg_pause_time_ratio;
+  double long_term_pause_time_ratio() const {
+    return _long_term_pause_time_ratio;
   }
 
-  double last_pause_time_ratio() const {
-    return _last_pause_time_ratio;
+  double short_term_pause_time_ratio() const {
+    return _short_term_pause_time_ratio;
   }
 
   uint number_of_recorded_pause_times() const {
@@ -115,7 +115,7 @@ public:
   void report_concurrent_mark_cleanup_times_ms(double ms);
   void report_alloc_rate_ms(double alloc_rate);
   void report_concurrent_refine_rate_ms(double cards_per_ms);
-  void report_logged_cards_rate_ms(double cards_per_ms);
+  void report_dirtied_cards_rate_ms(double cards_per_ms);
   void report_cost_per_card_scan_ms(double cost_per_remset_card_ms, bool for_young_gc);
   void report_cost_per_card_merge_ms(double cost_per_card_ms, bool for_young_gc);
   void report_card_merge_to_scan_ratio(double cards_per_entry_ratio, bool for_young_gc);
@@ -131,7 +131,7 @@ public:
   int num_alloc_rate_ms() const;
 
   double predict_concurrent_refine_rate_ms() const;
-  double predict_logged_cards_rate_ms() const;
+  double predict_dirtied_cards_rate_ms() const;
   double predict_young_card_merge_to_scan_ratio() const;
 
   double predict_mixed_card_merge_to_scan_ratio() const;

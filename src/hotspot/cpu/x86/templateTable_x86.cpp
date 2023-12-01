@@ -1237,10 +1237,11 @@ void TemplateTable::aastore() {
   __ testptr(rax, rax);
   __ jcc(Assembler::zero, is_null);
 
+  Register tmp_load_klass = LP64_ONLY(rscratch1) NOT_LP64(noreg);
   // Move subklass into rbx
-  __ load_klass(rbx, rax);
+  __ load_klass(rbx, rax, tmp_load_klass);
   // Move superklass into rax
-  __ load_klass(rax, rdx);
+  __ load_klass(rax, rdx, tmp_load_klass);
   __ movptr(rax, Address(rax,
                          ObjArrayKlass::element_klass_offset()));
 
@@ -1283,7 +1284,8 @@ void TemplateTable::bastore() {
   index_check(rdx, rbx); // prefer index in rbx
   // Need to check whether array is boolean or byte
   // since both types share the bastore bytecode.
-  __ load_klass(rcx, rdx);
+  Register tmp_load_klass = LP64_ONLY(rscratch1) NOT_LP64(noreg);
+  __ load_klass(rcx, rdx, tmp_load_klass);
   __ movl(rcx, Address(rcx, Klass::layout_helper_offset()));
   int diffbit = Klass::layout_helper_boolean_diffbit();
   __ testl(rcx, diffbit);
@@ -2753,7 +2755,8 @@ void TemplateTable::_return(TosState state) {
     assert(state == vtos, "only valid state");
     Register robj = LP64_ONLY(c_rarg1) NOT_LP64(rax);
     __ movptr(robj, aaddress(0));
-    __ load_klass(rdi, robj);
+    Register tmp_load_klass = LP64_ONLY(rscratch1) NOT_LP64(noreg);
+    __ load_klass(rdi, robj, tmp_load_klass);
     __ movl(rdi, Address(rdi, Klass::access_flags_offset()));
     __ testl(rdi, JVM_ACC_HAS_FINALIZER);
     Label skip_register_finalizer;
@@ -2764,7 +2767,7 @@ void TemplateTable::_return(TosState state) {
     __ bind(skip_register_finalizer);
   }
 
-  if (SafepointMechanism::uses_thread_local_poll() && _desc->bytecode() != Bytecodes::_return_register_finalizer) {
+  if (_desc->bytecode() != Bytecodes::_return_register_finalizer) {
     Label no_safepoint;
     NOT_PRODUCT(__ block_comment("Thread-local Safepoint poll"));
 #ifdef _LP64
@@ -3909,13 +3912,13 @@ void TemplateTable::invokevirtual_helper(Register index,
 
   // get receiver klass
   __ null_check(recv, oopDesc::klass_offset_in_bytes());
-  __ load_klass(rax, recv);
+  Register tmp_load_klass = LP64_ONLY(rscratch1) NOT_LP64(noreg);
+  __ load_klass(rax, recv, tmp_load_klass);
 
   // profile this call
   __ profile_virtual_call(rax, rlocals, rdx);
   // get target Method* & entry point
   __ lookup_virtual_method(rax, index, method);
-  __ profile_called_method(method, rdx, rbcp);
 
   __ profile_arguments_type(rdx, method, rbcp, true);
   __ jump_from_interpreted(method, rdx);
@@ -4002,7 +4005,8 @@ void TemplateTable::invokeinterface(int byte_no) {
 
   // Get receiver klass into rlocals - also a null check
   __ null_check(rcx, oopDesc::klass_offset_in_bytes());
-  __ load_klass(rlocals, rcx);
+  Register tmp_load_klass = LP64_ONLY(rscratch1) NOT_LP64(noreg);
+  __ load_klass(rlocals, rcx, tmp_load_klass);
 
   Label subtype;
   __ check_klass_subtype(rlocals, rax, rbcp, subtype);
@@ -4025,7 +4029,7 @@ void TemplateTable::invokeinterface(int byte_no) {
   // Get receiver klass into rdx - also a null check
   __ restore_locals();  // restore r14
   __ null_check(rcx, oopDesc::klass_offset_in_bytes());
-  __ load_klass(rdx, rcx);
+  __ load_klass(rdx, rcx, tmp_load_klass);
 
   Label no_such_method;
 
@@ -4067,7 +4071,6 @@ void TemplateTable::invokeinterface(int byte_no) {
   __ testptr(rbx, rbx);
   __ jcc(Assembler::zero, no_such_method);
 
-  __ profile_called_method(rbx, rbcp, rdx);
   __ profile_arguments_type(rdx, rbx, rbcp, true);
 
   // do the call
@@ -4287,7 +4290,8 @@ void TemplateTable::_new() {
     __ xorl(rsi, rsi); // use zero reg to clear memory (shorter code)
     __ store_klass_gap(rax, rsi);  // zero klass gap for compressed oops
 #endif
-    __ store_klass(rax, rcx);  // klass
+    Register tmp_store_klass = LP64_ONLY(rscratch1) NOT_LP64(noreg);
+    __ store_klass(rax, rcx, tmp_store_klass);  // klass
 
     {
       SkipIfEqual skip_if(_masm, &DTraceAllocProbes, 0);
@@ -4389,7 +4393,8 @@ void TemplateTable::checkcast() {
   __ load_resolved_klass_at_index(rax, rcx, rbx);
 
   __ bind(resolved);
-  __ load_klass(rbx, rdx);
+  Register tmp_load_klass = LP64_ONLY(rscratch1) NOT_LP64(noreg);
+  __ load_klass(rbx, rdx, tmp_load_klass);
 
   // Generate subtype check.  Blows rcx, rdi.  Object in rdx.
   // Superklass in rax.  Subklass in rbx.
@@ -4446,12 +4451,13 @@ void TemplateTable::instanceof() {
 
   __ pop_ptr(rdx); // restore receiver
   __ verify_oop(rdx);
-  __ load_klass(rdx, rdx);
+  Register tmp_load_klass = LP64_ONLY(rscratch1) NOT_LP64(noreg);
+  __ load_klass(rdx, rdx, tmp_load_klass);
   __ jmpb(resolved);
 
   // Get superklass in rax and subklass in rdx
   __ bind(quicked);
-  __ load_klass(rdx, rax);
+  __ load_klass(rdx, rax, tmp_load_klass);
   __ load_resolved_klass_at_index(rax, rcx, rbx);
 
   __ bind(resolved);

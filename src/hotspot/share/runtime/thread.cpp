@@ -351,12 +351,6 @@ void Thread::record_stack_base_and_size() {
   set_stack_base(os::current_stack_base());
   set_stack_size(os::current_stack_size());
 
-#ifdef SOLARIS
-  if (os::is_primordial_thread()) {
-    os::Solaris::correct_stack_boundaries_for_primordial_thread(this);
-  }
-#endif
-
   // Set stack limits after thread is initialized.
   if (is_Java_thread()) {
     ((JavaThread*) this)->set_stack_overflow_limit();
@@ -887,7 +881,9 @@ bool Thread::claim_par_threads_do(uintx claim_token) {
 }
 
 void Thread::oops_do(OopClosure* f, CodeBlobClosure* cf) {
-  active_handles()->oops_do(f);
+  if (active_handles() != NULL) {
+    active_handles()->oops_do(f);
+  }
   // Do oop for ThreadShadow
   f->do_oop((oop*)&_pending_exception);
   handle_area()->oops_do(f);
@@ -1018,20 +1014,13 @@ void Thread::check_for_valid_safepoint_state() {
 }
 #endif // ASSERT
 
-// Check for adr in the live portion of our stack.
-bool Thread::is_in_stack(address adr) const {
-  assert(Thread::current() == this, "is_in_stack can only be called from current thread");
-  address end = os::current_stack_pointer();
-  return (stack_base() > adr && adr >= end);
-}
-
 // We had to move these methods here, because vm threads get into ObjectSynchronizer::enter
 // However, there is a note in JavaThread::is_lock_owned() about the VM threads not being
 // used for compilation in the future. If that change is made, the need for these methods
 // should be revisited, and they should be removed if possible.
 
 bool Thread::is_lock_owned(address adr) const {
-  return on_local_stack(adr);
+  return is_in_full_stack(adr);
 }
 
 bool Thread::set_as_starting_thread() {
@@ -1248,7 +1237,7 @@ void JavaThread::allocate_threadObj(Handle thread_group, const char* thread_name
     return;
   }
 
-  Klass* group =  SystemDictionary::ThreadGroup_klass();
+  Klass* group = SystemDictionary::ThreadGroup_klass();
   Handle threadObj(THREAD, this->threadObj());
 
   JavaCalls::call_special(&result,
@@ -1676,7 +1665,7 @@ void JavaThread::initialize() {
   }
 #endif // INCLUDE_JVMCI
   _reserved_stack_activation = NULL;  // stack base not known yet
-  (void)const_cast<oop&>(_exception_oop = oop(NULL));
+  set_exception_oop(oop());
   _exception_pc  = 0;
   _exception_handler_pc = 0;
   _is_method_handle_return = 0;
@@ -1695,6 +1684,7 @@ void JavaThread::initialize() {
   _SleepEvent = ParkEvent::Allocate(this);
   // Setup safepoint state info for this thread
   ThreadSafepointState::create(this);
+  _handshake.set_handshakee(this);
 
   debug_only(_java_call_counter = 0);
 
@@ -1704,9 +1694,7 @@ void JavaThread::initialize() {
   _popframe_preserved_args_size = 0;
   _frames_to_pop_failed_realloc = 0;
 
-  if (SafepointMechanism::uses_thread_local_poll()) {
-    SafepointMechanism::initialize_header(this);
-  }
+  SafepointMechanism::initialize_header(this);
 
   _class_to_be_initialized = NULL;
 
@@ -1816,15 +1804,6 @@ bool JavaThread::reguard_stack(address cur_sp) {
 
 bool JavaThread::reguard_stack(void) {
   return reguard_stack(os::current_stack_pointer());
-}
-
-
-// Check for adr in the usable portion of this thread's stack.
-bool JavaThread::is_in_usable_stack(address adr) const {
-  size_t stack_guard_size = os::uses_stack_guard_pages() ? JavaThread::stack_guard_zone_size() : 0;
-  size_t usable_stack_size = _stack_size - stack_guard_size;
-
-  return ((stack_base() > adr) && (adr >= (stack_base() - usable_stack_size)));
 }
 
 void JavaThread::block_if_vm_exited() {
@@ -2066,7 +2045,6 @@ void JavaThread::exit(bool destroy_vm, ExitType exit_type) {
         CLEAR_PENDING_EXCEPTION;
       }
     }
-    JFR_ONLY(Jfr::on_java_thread_dismantle(this);)
 
     // Call Thread.exit(). We try 3 times in case we got another Thread.stop during
     // the execution of the method. If that is not enough, then we don't really care. Thread.stop
@@ -2184,6 +2162,14 @@ void JavaThread::exit(bool destroy_vm, ExitType exit_type) {
     JvmtiExport::cleanup_thread(this);
   }
 
+  // We need to cache the thread name for logging purposes below as once
+  // we have called on_thread_detach this thread must not access any oops.
+  char* thread_name = NULL;
+  if (log_is_enabled(Debug, os, thread, timer)) {
+    ResourceMark rm(this);
+    thread_name = os::strdup(get_thread_name());
+  }
+
   // We must flush any deferred card marks and other various GC barrier
   // related buffers (e.g. G1 SATB buffer and G1 dirty card queue buffer)
   // before removing a thread from the list of active threads.
@@ -2202,17 +2188,17 @@ void JavaThread::exit(bool destroy_vm, ExitType exit_type) {
 
   if (log_is_enabled(Debug, os, thread, timer)) {
     _timer_exit_phase4.stop();
-    ResourceMark rm(this);
     log_debug(os, thread, timer)("name='%s'"
                                  ", exit-phase1=" JLONG_FORMAT
                                  ", exit-phase2=" JLONG_FORMAT
                                  ", exit-phase3=" JLONG_FORMAT
                                  ", exit-phase4=" JLONG_FORMAT,
-                                 get_thread_name(),
+                                 thread_name,
                                  _timer_exit_phase1.milliseconds(),
                                  _timer_exit_phase2.milliseconds(),
                                  _timer_exit_phase3.milliseconds(),
                                  _timer_exit_phase4.milliseconds());
+    os::free(thread_name);
   }
 }
 
@@ -2265,6 +2251,13 @@ bool JavaThread::is_lock_owned(address adr) const {
   return false;
 }
 
+oop JavaThread::exception_oop() const {
+  return Atomic::load(&_exception_oop);
+}
+
+void JavaThread::set_exception_oop(oop o) {
+  Atomic::store(&_exception_oop, o);
+}
 
 void JavaThread::add_monitor_chunk(MonitorChunk* chunk) {
   chunk->set_next(monitor_chunks());
@@ -2288,7 +2281,8 @@ void JavaThread::remove_monitor_chunk(MonitorChunk* chunk) {
 // _thread_in_native_trans state (such as from
 // check_special_condition_for_native_trans()).
 void JavaThread::check_and_handle_async_exceptions(bool check_unsafe_error) {
-
+  // May be we are at method entry and requires to save do not unlock flag.
+  UnlockFlagSaver fs(this);
   if (has_last_Java_frame() && has_async_condition()) {
     // If we are at a polling page safepoint (not a poll return)
     // then we must defer async exception because live registers
@@ -3629,7 +3623,7 @@ void Threads::possibly_parallel_threads_do(bool is_par, ThreadClosure* tc) {
 //     fields in, out, and err. Set up java signal handlers, OS-specific
 //     system settings, and thread group of the main thread.
 static void call_initPhase1(TRAPS) {
-  Klass* klass =  SystemDictionary::resolve_or_fail(vmSymbols::java_lang_System(), true, CHECK);
+  Klass* klass = SystemDictionary::System_klass();
   JavaValue result(T_VOID);
   JavaCalls::call_static(&result, klass, vmSymbols::initPhase1_name(),
                                          vmSymbols::void_method_signature(), CHECK);
@@ -3649,7 +3643,7 @@ static void call_initPhase1(TRAPS) {
 static void call_initPhase2(TRAPS) {
   TraceTime timer("Initialize module system", TRACETIME_LOG(Info, startuptime));
 
-  Klass* klass = SystemDictionary::resolve_or_fail(vmSymbols::java_lang_System(), true, CHECK);
+  Klass* klass = SystemDictionary::System_klass();
 
   JavaValue result(T_INT);
   JavaCallArguments args;
@@ -3671,7 +3665,7 @@ static void call_initPhase2(TRAPS) {
 //     and system class loader may be a custom class loaded from -Xbootclasspath/a,
 //     other modules or the application's classpath.
 static void call_initPhase3(TRAPS) {
-  Klass* klass = SystemDictionary::resolve_or_fail(vmSymbols::java_lang_System(), true, CHECK);
+  Klass* klass = SystemDictionary::System_klass();
   JavaValue result(T_VOID);
   JavaCalls::call_static(&result, klass, vmSymbols::initPhase3_name(),
                                          vmSymbols::void_method_signature(), CHECK);
@@ -4342,6 +4336,13 @@ void Threads::create_vm_init_libraries() {
 void JavaThread::invoke_shutdown_hooks() {
   HandleMark hm(this);
 
+  // Link all classes for dynamic CDS dumping before vm exit.
+  // Same operation is being done in JVM_BeforeHalt for handling the
+  // case where the application calls System.exit().
+  if (DynamicDumpSharedSpaces) {
+    MetaspaceShared::link_and_cleanup_shared_classes(this);
+  }
+
   // We could get here with a pending exception, if so clear it now.
   if (this->has_pending_exception()) {
     this->clear_pending_exception();
@@ -4435,6 +4436,16 @@ bool Threads::destroy_vm() {
 
   thread->exit(true);
 
+  // We are no longer on the main thread list but could still be in a
+  // secondary list where another thread may try to interact with us.
+  // So wait until all such interactions are complete before we bring
+  // the VM to the termination safepoint. Normally this would be done
+  // using thread->smr_delete() below where we delete the thread, but
+  // we can't call that after the termination safepoint is active as
+  // we will deadlock on the Threads_lock. Once all interactions are
+  // complete it is safe to directly delete the thread at any time.
+  ThreadsSMRSupport::wait_until_not_protected(thread);
+
   // Stop VM thread.
   {
     // 4945125 The vm thread comes to a safepoint during exit.
@@ -4474,11 +4485,8 @@ bool Threads::destroy_vm() {
   // exit_globals() will delete tty
   exit_globals();
 
-  // We are after VM_Exit::set_vm_exited() so we can't call
-  // thread->smr_delete() or we will block on the Threads_lock.
-  // Deleting the shutdown thread here is safe because another
-  // JavaThread cannot have an active ThreadsListHandle for
-  // this JavaThread.
+  // Deleting the shutdown thread here is safe. See comment on
+  // wait_until_not_protected() above.
   delete thread;
 
 #if INCLUDE_JVMCI
@@ -4684,6 +4692,8 @@ GrowableArray<JavaThread*>* Threads::get_pending_threads(ThreadsList * t_list,
   DO_JAVA_THREADS(t_list, p) {
     if (!p->can_call_java()) continue;
 
+    // The first stage of async deflation does not affect any field
+    // used by this comparison so the ObjectMonitor* is usable here.
     address pending = (address)p->current_pending_monitor();
     if (pending == monitor) {             // found a match
       if (i < count) result->append(p);   // save the first count matches
@@ -4725,6 +4735,22 @@ JavaThread *Threads::owning_thread_from_monitor_owner(ThreadsList * t_list,
   // cannot assert on lack of success here; see above comment
   return the_owner;
 }
+
+class PrintOnClosure : public ThreadClosure {
+private:
+  outputStream* _st;
+
+public:
+  PrintOnClosure(outputStream* st) :
+      _st(st) {}
+
+  virtual void do_thread(Thread* thread) {
+    if (thread != NULL) {
+      thread->print_on(_st);
+      _st->cr();
+    }
+  }
+};
 
 // Threads::print_on() is called at safepoint by VM_PrintThreads operation.
 void Threads::print_on(outputStream* st, bool print_stacks,
@@ -4768,14 +4794,10 @@ void Threads::print_on(outputStream* st, bool print_stacks,
 #endif // INCLUDE_SERVICES
   }
 
-  VMThread::vm_thread()->print_on(st);
-  st->cr();
-  Universe::heap()->print_gc_threads_on(st);
-  WatcherThread* wt = WatcherThread::watcher_thread();
-  if (wt != NULL) {
-    wt->print_on(st);
-    st->cr();
-  }
+  PrintOnClosure cl(st);
+  cl.do_thread(VMThread::vm_thread());
+  Universe::heap()->gc_threads_do(&cl);
+  cl.do_thread(WatcherThread::watcher_thread());
 
   st->flush();
 }
@@ -4830,8 +4852,10 @@ void Threads::print_on_error(outputStream* st, Thread* current, char* buf,
   print_on_error(VMThread::vm_thread(), st, current, buf, buflen, &found_current);
   print_on_error(WatcherThread::watcher_thread(), st, current, buf, buflen, &found_current);
 
-  PrintOnErrorClosure print_closure(st, current, buf, buflen, &found_current);
-  Universe::heap()->gc_threads_do(&print_closure);
+  if (Universe::heap() != NULL) {
+    PrintOnErrorClosure print_closure(st, current, buf, buflen, &found_current);
+    Universe::heap()->gc_threads_do(&print_closure);
+  }
 
   if (!found_current) {
     st->cr();

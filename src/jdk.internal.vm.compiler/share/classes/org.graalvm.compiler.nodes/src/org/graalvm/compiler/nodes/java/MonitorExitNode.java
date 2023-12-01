@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2009, 2019, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2009, 2020, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -32,9 +32,8 @@ import org.graalvm.compiler.graph.NodeClass;
 import org.graalvm.compiler.nodeinfo.NodeInfo;
 import org.graalvm.compiler.nodes.ValueNode;
 import org.graalvm.compiler.nodes.extended.MonitorExit;
-import org.graalvm.compiler.nodes.memory.MemoryCheckpoint;
+import org.graalvm.compiler.nodes.memory.SingleMemoryKill;
 import org.graalvm.compiler.nodes.spi.Lowerable;
-import org.graalvm.compiler.nodes.spi.LoweringTool;
 import org.graalvm.compiler.nodes.spi.Virtualizable;
 import org.graalvm.compiler.nodes.spi.VirtualizerTool;
 import org.graalvm.compiler.nodes.virtual.VirtualObjectNode;
@@ -46,7 +45,7 @@ import jdk.internal.vm.compiler.word.LocationIdentity;
  * {@link #escapedReturnValue}, so that it will be materialized before releasing the monitor.
  */
 @NodeInfo(cycles = CYCLES_64, size = SIZE_64)
-public final class MonitorExitNode extends AccessMonitorNode implements Virtualizable, Lowerable, IterableNodeType, MonitorExit, MemoryCheckpoint.Single {
+public final class MonitorExitNode extends AccessMonitorNode implements Virtualizable, Lowerable, IterableNodeType, MonitorExit, SingleMemoryKill {
 
     public static final NodeClass<MonitorExitNode> TYPE = NodeClass.create(MonitorExitNode.class);
 
@@ -75,11 +74,6 @@ public final class MonitorExitNode extends AccessMonitorNode implements Virtuali
     }
 
     @Override
-    public void lower(LoweringTool tool) {
-        tool.getLowerer().lower(this, tool);
-    }
-
-    @Override
     public void virtualize(VirtualizerTool tool) {
         ValueNode alias = tool.getAlias(object());
         if (alias instanceof VirtualObjectNode) {
@@ -91,4 +85,5 @@ public final class MonitorExitNode extends AccessMonitorNode implements Virtuali
             }
         }
     }
+
 }

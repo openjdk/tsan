@@ -28,6 +28,7 @@
 #include "libadt/vectset.hpp"
 #include "memory/allocation.inline.hpp"
 #include "memory/resourceArea.hpp"
+#include "opto/ad.hpp"
 #include "opto/castnode.hpp"
 #include "opto/cfgnode.hpp"
 #include "opto/connode.hpp"
@@ -66,21 +67,27 @@ extern int nodes_created;
 void Node::verify_construction() {
   _debug_orig = NULL;
   int old_debug_idx = Compile::debug_idx();
-  int new_debug_idx = old_debug_idx+1;
+  int new_debug_idx = old_debug_idx + 1;
   if (new_debug_idx > 0) {
     // Arrange that the lowest five decimal digits of _debug_idx
     // will repeat those of _idx. In case this is somehow pathological,
     // we continue to assign negative numbers (!) consecutively.
     const int mod = 100000;
     int bump = (int)(_idx - new_debug_idx) % mod;
-    if (bump < 0)  bump += mod;
+    if (bump < 0) {
+      bump += mod;
+    }
     assert(bump >= 0 && bump < mod, "");
     new_debug_idx += bump;
   }
   Compile::set_debug_idx(new_debug_idx);
-  set_debug_idx( new_debug_idx );
-  assert(Compile::current()->unique() < (INT_MAX - 1), "Node limit exceeded INT_MAX");
-  assert(Compile::current()->live_nodes() < Compile::current()->max_node_limit(), "Live Node limit exceeded limit");
+  set_debug_idx(new_debug_idx);
+  Compile* C = Compile::current();
+  assert(C->unique() < (INT_MAX - 1), "Node limit exceeded INT_MAX");
+  if (!C->phase_optimize_finished()) {
+    // Only check assert during parsing and optimization phase. Skip it while generating code.
+    assert(C->live_nodes() <= C->max_node_limit(), "Live Node limit exceeded limit");
+  }
   if (BreakAtNode != 0 && (_debug_idx == BreakAtNode || (int)_idx == BreakAtNode)) {
     tty->print_cr("BreakAtNode: _idx=%d _debug_idx=%d", _idx, _debug_idx);
     BREAKPOINT;
@@ -1033,7 +1040,12 @@ bool Node::verify_jvms(const JVMState* using_jvms) const {
 //------------------------------init_NodeProperty------------------------------
 void Node::init_NodeProperty() {
   assert(_max_classes <= max_jushort, "too many NodeProperty classes");
-  assert(_max_flags <= max_jushort, "too many NodeProperty flags");
+  assert(max_flags() <= max_jushort, "too many NodeProperty flags");
+}
+
+//-----------------------------max_flags---------------------------------------
+juint Node::max_flags() {
+  return (PD::_last_flag << 1) - 1; // allow flags combination
 }
 #endif
 
@@ -1588,6 +1600,11 @@ Node* find_node(Node* n, int idx) {
   return n->find(idx);
 }
 
+// call this from debugger with root node as default:
+Node* find_node(int idx) {
+  return Compile::current()->root()->find(idx);
+}
+
 //------------------------------find-------------------------------------------
 Node* Node::find(int idx) const {
   ResourceArea *area = Thread::current()->resource_area();
@@ -1624,12 +1641,15 @@ static bool is_disconnected(const Node* n) {
 }
 
 #ifdef ASSERT
-static void dump_orig(Node* orig, outputStream *st) {
+void Node::dump_orig(outputStream *st, bool print_key) const {
   Compile* C = Compile::current();
+  Node* orig = _debug_orig;
   if (NotANode(orig)) orig = NULL;
   if (orig != NULL && !C->node_arena()->contains(orig)) orig = NULL;
   if (orig == NULL) return;
-  st->print(" !orig=");
+  if (print_key) {
+    st->print(" !orig=");
+  }
   Node* fast = orig->debug_orig(); // tortoise & hare algorithm to detect loops
   if (NotANode(fast)) fast = NULL;
   while (orig != NULL) {
@@ -1694,7 +1714,7 @@ void Node::dump(const char* suffix, bool mark, outputStream *st) const {
   if (is_disconnected(this)) {
 #ifdef ASSERT
     st->print("  [%d]",debug_idx());
-    dump_orig(debug_orig(), st);
+    dump_orig(st);
 #endif
     st->cr();
     C->_in_dump_cnt--;
@@ -1742,7 +1762,7 @@ void Node::dump(const char* suffix, bool mark, outputStream *st) const {
     t->dump_on(st);
   }
   if (is_new) {
-    debug_only(dump_orig(debug_orig(), st));
+    DEBUG_ONLY(dump_orig(st));
     Node_Notes* nn = C->node_notes_at(_idx);
     if (nn != NULL && !nn->is_clear()) {
       if (nn->jvms() != NULL) {

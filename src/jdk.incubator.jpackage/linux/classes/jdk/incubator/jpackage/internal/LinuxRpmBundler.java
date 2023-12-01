@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012, 2019, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2012, 2020, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -32,10 +32,8 @@ import java.util.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 import static jdk.incubator.jpackage.internal.StandardBundlerParam.*;
-import static jdk.incubator.jpackage.internal.LinuxAppBundler.LINUX_INSTALL_DIR;
 import static jdk.incubator.jpackage.internal.OverridableResource.createResource;
 
 /**
@@ -108,7 +106,7 @@ public class LinuxRpmBundler extends LinuxPackageBundler {
     public final static String TOOL_RPM = "rpm";
     public final static String TOOL_RPMBUILD = "rpmbuild";
     public final static DottedVersion TOOL_RPMBUILD_MIN_VERSION = DottedVersion.lazy(
-            "4.0");
+            "4.10");
 
     public LinuxRpmBundler() {
         super(PACKAGE_NAME);
@@ -161,8 +159,15 @@ public class LinuxRpmBundler extends LinuxPackageBundler {
             Map<String, ? super Object> params) throws IOException {
         Map<String, String> data = new HashMap<>();
 
-        data.put("APPLICATION_DIRECTORY", Path.of(LINUX_INSTALL_DIR.fetchFrom(
-                params), PACKAGE_NAME.fetchFrom(params)).toString());
+        final Path prefix = Path.of(LINUX_INSTALL_DIR.fetchFrom(params));
+
+        Path appDirectory = prefix;
+        if (!isInstallDirInUsrTree(prefix.toString())) {
+            appDirectory = appDirectory.resolve(PACKAGE_NAME.fetchFrom(params));
+        }
+
+        data.put("APPLICATION_PREFIX", prefix.toString());
+        data.put("APPLICATION_DIRECTORY", appDirectory.toString());
         data.put("APPLICATION_SUMMARY", APP_NAME.fetchFrom(params));
         data.put("APPLICATION_LICENSE_TYPE", LICENSE_TYPE.fetchFrom(params));
 

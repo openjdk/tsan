@@ -38,10 +38,8 @@
 #include "services/gcNotifier.hpp"
 #include "utilities/dtrace.hpp"
 
-MemoryManager::MemoryManager(const char* name) : _name(name) {
-  _num_pools = 0;
-  (void)const_cast<instanceOop&>(_memory_mgr_obj = instanceOop(NULL));
-}
+MemoryManager::MemoryManager(const char* name) :
+  _num_pools(0), _name(name), _memory_mgr_obj() {}
 
 int MemoryManager::add_pool(MemoryPool* pool) {
   int index = _num_pools;
@@ -52,6 +50,10 @@ int MemoryManager::add_pool(MemoryPool* pool) {
   }
   pool->add_manager(this);
   return index;
+}
+
+bool MemoryManager::is_manager(instanceHandle mh) const {
+  return mh() == Atomic::load(&_memory_mgr_obj);
 }
 
 MemoryManager* MemoryManager::get_code_cache_memory_manager() {
@@ -69,9 +71,9 @@ instanceOop MemoryManager::get_memory_manager_instance(TRAPS) {
   if (mgr_obj == NULL) {
     // It's ok for more than one thread to execute the code up to the locked region.
     // Extra manager instances will just be gc'ed.
-    Klass* k = Management::sun_management_ManagementFactoryHelper_klass(CHECK_0);
+    Klass* k = Management::sun_management_ManagementFactoryHelper_klass(CHECK_NULL);
 
-    Handle mgr_name = java_lang_String::create_from_str(name(), CHECK_0);
+    Handle mgr_name = java_lang_String::create_from_str(name(), CHECK_NULL);
 
     JavaValue result(T_OBJECT);
     JavaCallArguments args;
@@ -80,7 +82,7 @@ instanceOop MemoryManager::get_memory_manager_instance(TRAPS) {
     Symbol* method_name = NULL;
     Symbol* signature = NULL;
     if (is_gc_memory_manager()) {
-      Klass* extKlass = Management::com_sun_management_internal_GarbageCollectorExtImpl_klass(CHECK_0);
+      Klass* extKlass = Management::com_sun_management_internal_GarbageCollectorExtImpl_klass(CHECK_NULL);
       // com.sun.management.GarbageCollectorMXBean is in jdk.management module which may not be present.
       if (extKlass != NULL) {
         k = extKlass;
@@ -102,7 +104,7 @@ instanceOop MemoryManager::get_memory_manager_instance(TRAPS) {
                            method_name,
                            signature,
                            &args,
-                           CHECK_0);
+                           CHECK_NULL);
 
     instanceOop m = (instanceOop) result.get_jobject();
     instanceHandle mgr(THREAD, m);

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017, 2018, Red Hat, Inc. All rights reserved.
+ * Copyright (c) 2017, 2020, Red Hat, Inc. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -25,8 +25,7 @@
 /**
  * @test TestGCThreadGroups
  * @summary Test Shenandoah GC uses concurrent/parallel threads correctly
- * @key gc
- * @requires vm.gc.Shenandoah & !vm.graal.enabled
+ * @requires vm.gc.Shenandoah
  *
  * @run main/othervm -Xmx16m -XX:+UnlockDiagnosticVMOptions -XX:+UnlockExperimentalVMOptions
  *      -XX:+UseShenandoahGC -XX:ShenandoahGCMode=passive
@@ -38,8 +37,7 @@
 /**
  * @test TestGCThreadGroups
  * @summary Test Shenandoah GC uses concurrent/parallel threads correctly
- * @key gc
- * @requires vm.gc.Shenandoah & !vm.graal.enabled
+ * @requires vm.gc.Shenandoah
  *
  * @run main/othervm -Xmx16m -XX:+UnlockDiagnosticVMOptions -XX:+UnlockExperimentalVMOptions
  *      -XX:+UseShenandoahGC
@@ -50,12 +48,6 @@
  * @run main/othervm -Xmx16m -XX:+UnlockDiagnosticVMOptions -XX:+UnlockExperimentalVMOptions
  *      -XX:+UseShenandoahGC
  *      -XX:-UseDynamicNumberOfGCThreads
- *      -Dtarget=1000
- *      TestGCThreadGroups
- *
- * @run main/othervm -Xmx16m -XX:+UnlockDiagnosticVMOptions -XX:+UnlockExperimentalVMOptions
- *      -XX:+UseShenandoahGC
- *      -XX:+ForceDynamicNumberOfGCThreads
  *      -Dtarget=1000
  *      TestGCThreadGroups
  *
@@ -87,17 +79,16 @@
 /**
  * @test TestGCThreadGroups
  * @summary Test Shenandoah GC uses concurrent/parallel threads correctly
- * @key gc
- * @requires vm.gc.Shenandoah & !vm.graal.enabled
+ * @requires vm.gc.Shenandoah
  *
  * @run main/othervm -Xmx16m -XX:+UnlockDiagnosticVMOptions -XX:+UnlockExperimentalVMOptions
- *      -XX:+UseShenandoahGC -XX:ShenandoahGCMode=traversal
+ *      -XX:+UseShenandoahGC -XX:ShenandoahGCMode=iu
  *      -XX:ConcGCThreads=2 -XX:ParallelGCThreads=4
  *      -Dtarget=1000
  *      TestGCThreadGroups
  *
  * @run main/othervm -Xmx16m -XX:+UnlockDiagnosticVMOptions -XX:+UnlockExperimentalVMOptions
- *      -XX:+UseShenandoahGC -XX:ShenandoahGCMode=traversal -XX:ShenandoahGCHeuristics=aggressive
+ *      -XX:+UseShenandoahGC -XX:ShenandoahGCMode=iu -XX:ShenandoahGCHeuristics=aggressive
  *      -XX:ConcGCThreads=2 -XX:ParallelGCThreads=4
  *      -Dtarget=1000
  *      TestGCThreadGroups

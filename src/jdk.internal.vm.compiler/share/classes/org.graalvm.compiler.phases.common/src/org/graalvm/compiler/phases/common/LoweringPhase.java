@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2011, 2019, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2011, 2020, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -37,8 +37,6 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 
-import org.graalvm.compiler.core.common.spi.ConstantFieldProvider;
-import org.graalvm.compiler.core.common.spi.ForeignCallsProvider;
 import org.graalvm.compiler.core.common.type.StampFactory;
 import org.graalvm.compiler.debug.DebugCloseable;
 import org.graalvm.compiler.debug.GraalError;
@@ -69,23 +67,21 @@ import org.graalvm.compiler.nodes.cfg.Block;
 import org.graalvm.compiler.nodes.extended.AnchoringNode;
 import org.graalvm.compiler.nodes.extended.GuardedNode;
 import org.graalvm.compiler.nodes.extended.GuardingNode;
-import org.graalvm.compiler.nodes.memory.MemoryCheckpoint;
+import org.graalvm.compiler.nodes.memory.MemoryKill;
+import org.graalvm.compiler.nodes.memory.MultiMemoryKill;
+import org.graalvm.compiler.nodes.memory.SingleMemoryKill;
 import org.graalvm.compiler.nodes.spi.CoreProviders;
+import org.graalvm.compiler.nodes.spi.CoreProvidersDelegate;
 import org.graalvm.compiler.nodes.spi.Lowerable;
-import org.graalvm.compiler.nodes.spi.LoweringProvider;
 import org.graalvm.compiler.nodes.spi.LoweringTool;
-import org.graalvm.compiler.nodes.spi.Replacements;
-import org.graalvm.compiler.nodes.spi.StampProvider;
 import org.graalvm.compiler.options.OptionValues;
 import org.graalvm.compiler.phases.BasePhase;
 import org.graalvm.compiler.phases.Phase;
 import org.graalvm.compiler.phases.schedule.SchedulePhase;
 import jdk.internal.vm.compiler.word.LocationIdentity;
 
-import jdk.vm.ci.meta.ConstantReflectionProvider;
 import jdk.vm.ci.meta.DeoptimizationAction;
 import jdk.vm.ci.meta.DeoptimizationReason;
-import jdk.vm.ci.meta.MetaAccessProvider;
 import jdk.vm.ci.meta.SpeculationLog;
 import jdk.vm.ci.meta.SpeculationLog.Speculation;
 
@@ -126,16 +122,15 @@ public class LoweringPhase extends BasePhase<CoreProviders> {
         return false;
     }
 
-    final class LoweringToolImpl implements LoweringTool {
+    final class LoweringToolImpl extends CoreProvidersDelegate implements LoweringTool {
 
-        private final CoreProviders context;
         private final NodeBitMap activeGuards;
         private AnchoringNode guardAnchor;
         private FixedWithNextNode lastFixedNode;
         private NodeMap<Block> nodeMap;
 
         LoweringToolImpl(CoreProviders context, AnchoringNode guardAnchor, NodeBitMap activeGuards, FixedWithNextNode lastFixedNode, NodeMap<Block> nodeMap) {
-            this.context = context;
+            super(context);
             this.guardAnchor = guardAnchor;
             this.activeGuards = activeGuards;
             this.lastFixedNode = lastFixedNode;
@@ -148,40 +143,6 @@ public class LoweringPhase extends BasePhase<CoreProviders> {
         }
 
         @Override
-        public CoreProviders getProviders() {
-            return context;
-        }
-
-        @Override
-        public ConstantReflectionProvider getConstantReflection() {
-            return context.getConstantReflection();
-        }
-
-        @Override
-        public ConstantFieldProvider getConstantFieldProvider() {
-            return context.getConstantFieldProvider();
-        }
-
-        @Override
-        public MetaAccessProvider getMetaAccess() {
-            return context.getMetaAccess();
-        }
-
-        @Override
-        public LoweringProvider getLowerer() {
-            return context.getLowerer();
-        }
-
-        @Override
-        public Replacements getReplacements() {
-            return context.getReplacements();
-        }
-
-        public ForeignCallsProvider getForeignCalls() {
-            return context.getForeignCalls();
-        }
-
-        @Override
         public AnchoringNode getCurrentGuardAnchor() {
             return guardAnchor;
         }
@@ -189,11 +150,6 @@ public class LoweringPhase extends BasePhase<CoreProviders> {
         @Override
         public GuardingNode createGuard(FixedNode before, LogicNode condition, DeoptimizationReason deoptReason, DeoptimizationAction action) {
             return createGuard(before, condition, deoptReason, action, SpeculationLog.NO_SPECULATION, false, null);
-        }
-
-        @Override
-        public StampProvider getStampProvider() {
-            return context.getStampProvider();
         }
 
         @Override
@@ -306,21 +262,23 @@ public class LoweringPhase extends BasePhase<CoreProviders> {
                 assert postLoweringMark.equals(mark) : graph + ": lowering of " + node + " produced lowerable " + n + " that should have been recursively lowered as it introduces these new nodes: " +
                                 graph.getNewNodes(postLoweringMark).snapshot();
             }
-            if (graph.isAfterFloatingReadPhase() && n instanceof MemoryCheckpoint && !(node instanceof MemoryCheckpoint) && !(node instanceof ControlSinkNode)) {
+            if (graph.isAfterFloatingReadPhase() && n instanceof MemoryKill && !(node instanceof MemoryKill) && !(node instanceof ControlSinkNode)) {
                 /*
                  * The lowering introduced a MemoryCheckpoint but the current node isn't a
                  * checkpoint. This is only OK if the locations involved don't affect the memory
                  * graph or if the new kill location doesn't connect into the existing graph.
                  */
                 boolean isAny = false;
-                if (n instanceof MemoryCheckpoint.Single) {
-                    isAny = ((MemoryCheckpoint.Single) n).getKilledLocationIdentity().isAny();
-                } else {
-                    for (LocationIdentity ident : ((MemoryCheckpoint.Multi) n).getKilledLocationIdentities()) {
+                if (n instanceof SingleMemoryKill) {
+                    isAny = ((SingleMemoryKill) n).getKilledLocationIdentity().isAny();
+                } else if (n instanceof MultiMemoryKill) {
+                    for (LocationIdentity ident : ((MultiMemoryKill) n).getKilledLocationIdentities()) {
                         if (ident.isAny()) {
                             isAny = true;
                         }
                     }
+                } else {
+                    throw GraalError.shouldNotReachHere("Unknown type of memory kill " + n);
                 }
                 if (isAny && n instanceof FixedWithNextNode) {
                     /*

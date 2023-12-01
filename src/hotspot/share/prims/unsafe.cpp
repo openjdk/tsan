@@ -27,12 +27,14 @@
 #include "jvm.h"
 #include "classfile/classFileStream.hpp"
 #include "classfile/classLoader.hpp"
+#include "classfile/javaClasses.inline.hpp"
 #include "classfile/vmSymbols.hpp"
 #include "jfr/jfrEvents.hpp"
 #include "memory/allocation.inline.hpp"
 #include "memory/resourceArea.hpp"
 #include "oops/access.inline.hpp"
 #include "oops/fieldStreams.inline.hpp"
+#include "oops/instanceKlass.inline.hpp"
 #include "oops/objArrayOop.inline.hpp"
 #include "oops/oop.inline.hpp"
 #include "oops/typeArrayOop.inline.hpp"
@@ -398,8 +400,8 @@ UNSAFE_LEAF(void, Unsafe_FullFence(JNIEnv *env, jobject unsafe)) {
 ////// Allocation requests
 
 UNSAFE_ENTRY(jobject, Unsafe_AllocateInstance(JNIEnv *env, jobject unsafe, jclass cls)) {
-  ThreadToNativeFromVM ttnfv(thread);
-  return env->AllocObject(cls);
+  instanceOop i = InstanceKlass::allocate_instance(JNIHandles::resolve_non_null(cls), CHECK_NULL);
+  return JNIHandles::make_local(env, i);
 } UNSAFE_END
 
 UNSAFE_ENTRY(jlong, Unsafe_AllocateMemory0(JNIEnv *env, jobject unsafe, jlong size)) {
@@ -895,12 +897,19 @@ Unsafe_DefineAnonymousClass_impl(JNIEnv *env,
   ClassFileStream st(class_bytes, class_bytes_length, host_source, ClassFileStream::verify);
 
   Symbol* no_class_name = NULL;
+  ClassLoadInfo cl_info(host_domain,
+                        InstanceKlass::cast(host_klass),
+                        cp_patches,
+                        NULL,     // dynamic_nest_host
+                        Handle(), // classData
+                        false,    // is_hidden
+                        false,    // is_strong_hidden
+                        true);    // can_access_vm_annotations
+
   Klass* anonk = SystemDictionary::parse_stream(no_class_name,
                                                 host_loader,
-                                                host_domain,
                                                 &st,
-                                                InstanceKlass::cast(host_klass),
-                                                cp_patches,
+                                                cl_info,
                                                 CHECK_NULL);
   if (anonk == NULL) {
     return NULL;
@@ -1016,6 +1025,7 @@ UNSAFE_ENTRY(jboolean, Unsafe_CompareAndSetReference(JNIEnv *env, jobject unsafe
 
 UNSAFE_ENTRY(jboolean, Unsafe_CompareAndSetInt(JNIEnv *env, jobject unsafe, jobject obj, jlong offset, jint e, jint x)) {
   oop p = JNIHandles::resolve(obj);
+  GuardUnsafeAccess guard(thread);
   if (p == NULL) {
     volatile jint* addr = (volatile jint*)index_oop_from_field_offset_long(p, offset);
     ScopedReleaseAcquire releaseAcquire(addr);
@@ -1029,6 +1039,7 @@ UNSAFE_ENTRY(jboolean, Unsafe_CompareAndSetInt(JNIEnv *env, jobject unsafe, jobj
 
 UNSAFE_ENTRY(jboolean, Unsafe_CompareAndSetLong(JNIEnv *env, jobject unsafe, jobject obj, jlong offset, jlong e, jlong x)) {
   oop p = JNIHandles::resolve(obj);
+  GuardUnsafeAccess guard(thread);
   if (p == NULL) {
     volatile jlong* addr = (volatile jlong*)index_oop_from_field_offset_long(p, offset);
     ScopedReleaseAcquire releaseAcquire(addr);

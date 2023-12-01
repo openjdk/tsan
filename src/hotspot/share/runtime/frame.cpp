@@ -231,8 +231,7 @@ JavaCallWrapper* frame::entry_frame_call_wrapper_if_safe(JavaThread* thread) con
 bool frame::is_entry_frame_valid(JavaThread* thread) const {
   // Validate the JavaCallWrapper an entry frame must have
   address jcw = (address)entry_frame_call_wrapper();
-  bool jcw_safe = (jcw < thread->stack_base()) && (jcw > (address)fp()); // less than stack base
-  if (!jcw_safe) {
+  if (!thread->is_in_stack_range_excl(jcw, (address)fp())) {
     return false;
   }
 
@@ -1040,9 +1039,6 @@ void frame::oops_entry_do(OopClosure* f, const RegisterMap* map) {
 
 void frame::oops_do_internal(OopClosure* f, CodeBlobClosure* cf, RegisterMap* map, bool use_interpreter_oop_map_cache) {
 #ifndef PRODUCT
-#if defined(__SUNPRO_CC) && __SUNPRO_CC >= 0x5140
-#pragma error_messages(off, SEC_NULL_PTR_DEREF)
-#endif
   // simulate GC crash here to dump java thread in error report
   if (CrashGCForDumpingJavaThread) {
     char *t = NULL;
@@ -1284,17 +1280,17 @@ void FrameValues::print(JavaThread* thread) {
   intptr_t* v1 = _values.at(max_index).location;
 
   if (thread == Thread::current()) {
-    while (!thread->is_in_stack((address)v0)) {
+    while (!thread->is_in_live_stack((address)v0)) {
       v0 = _values.at(++min_index).location;
     }
-    while (!thread->is_in_stack((address)v1)) {
+    while (!thread->is_in_live_stack((address)v1)) {
       v1 = _values.at(--max_index).location;
     }
   } else {
-    while (!thread->on_local_stack((address)v0)) {
+    while (!thread->is_in_full_stack((address)v0)) {
       v0 = _values.at(++min_index).location;
     }
-    while (!thread->on_local_stack((address)v1)) {
+    while (!thread->is_in_full_stack((address)v1)) {
       v1 = _values.at(--max_index).location;
     }
   }

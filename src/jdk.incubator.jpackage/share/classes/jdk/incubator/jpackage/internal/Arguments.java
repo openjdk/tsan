@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2018, 2019, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2018, 2020, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -69,6 +69,20 @@ public class Arguments {
     private static final String FA_CONTENT_TYPE = "mime-type";
     private static final String FA_DESCRIPTION = "description";
     private static final String FA_ICON = "icon";
+
+    // Mac specific file association keys
+    // String
+    public static final String MAC_CFBUNDLETYPEROLE = "mac.CFBundleTypeRole";
+    public static final String MAC_LSHANDLERRANK = "mac.LSHandlerRank";
+    public static final String MAC_NSSTORETYPEKEY = "mac.NSPersistentStoreTypeKey";
+    public static final String MAC_NSDOCUMENTCLASS = "mac.NSDocumentClass";
+    // Boolean
+    public static final String MAC_LSTYPEISPACKAGE = "mac.LSTypeIsPackage";
+    public static final String MAC_LSDOCINPLACE = "mac.LSSupportsOpeningDocumentsInPlace";
+    public static final String MAC_UIDOCBROWSER = "mac.UISupportsDocumentBrowser";
+     // Array of strings
+    public static final String MAC_NSEXPORTABLETYPES = "mac.NSExportableTypes";
+    public static final String MAC_UTTYPECONFORMSTO = "mac.UTTypeConformsTo";
 
     // regexp for parsing args (for example, for additional launchers)
     private static Pattern pattern = Pattern.compile(
@@ -170,6 +184,11 @@ public class Arguments {
             setOptionValue("arguments", arguments);
         }),
 
+        JLINK_OPTIONS ("jlink-options", OptionCategories.PROPERTY, () -> {
+            List<String> options = getArgumentList(popArg());
+            setOptionValue("jlink-options", options);
+        }),
+
         ICON ("icon", OptionCategories.PROPERTY),
 
         COPYRIGHT ("copyright", OptionCategories.PROPERTY),
@@ -192,25 +211,45 @@ public class Arguments {
             // load .properties file
             Map<String, String> initialMap = getPropertiesFromFile(popArg());
 
-            String ext = initialMap.get(FA_EXTENSIONS);
-            if (ext != null) {
-                args.put(StandardBundlerParam.FA_EXTENSIONS.getID(), ext);
-            }
+            putUnlessNull(args, StandardBundlerParam.FA_EXTENSIONS.getID(),
+                    initialMap.get(FA_EXTENSIONS));
 
-            String type = initialMap.get(FA_CONTENT_TYPE);
-            if (type != null) {
-                args.put(StandardBundlerParam.FA_CONTENT_TYPE.getID(), type);
-            }
+            putUnlessNull(args, StandardBundlerParam.FA_CONTENT_TYPE.getID(),
+                    initialMap.get(FA_CONTENT_TYPE));
 
-            String desc = initialMap.get(FA_DESCRIPTION);
-            if (desc != null) {
-                args.put(StandardBundlerParam.FA_DESCRIPTION.getID(), desc);
-            }
+            putUnlessNull(args, StandardBundlerParam.FA_DESCRIPTION.getID(),
+                    initialMap.get(FA_DESCRIPTION));
 
-            String icon = initialMap.get(FA_ICON);
-            if (icon != null) {
-                args.put(StandardBundlerParam.FA_ICON.getID(), icon);
-            }
+            putUnlessNull(args, StandardBundlerParam.FA_ICON.getID(),
+                    initialMap.get(FA_ICON));
+
+            // Mac extended file association arguments
+            putUnlessNull(args, MAC_CFBUNDLETYPEROLE,
+                    initialMap.get(MAC_CFBUNDLETYPEROLE));
+
+            putUnlessNull(args, MAC_LSHANDLERRANK,
+                    initialMap.get(MAC_LSHANDLERRANK));
+
+            putUnlessNull(args, MAC_NSSTORETYPEKEY,
+                    initialMap.get(MAC_NSSTORETYPEKEY));
+
+            putUnlessNull(args, MAC_NSDOCUMENTCLASS,
+                    initialMap.get(MAC_NSDOCUMENTCLASS));
+
+            putUnlessNull(args, MAC_LSTYPEISPACKAGE,
+                    initialMap.get(MAC_LSTYPEISPACKAGE));
+
+            putUnlessNull(args, MAC_LSDOCINPLACE,
+                    initialMap.get(MAC_LSDOCINPLACE));
+
+            putUnlessNull(args, MAC_UIDOCBROWSER,
+                    initialMap.get(MAC_UIDOCBROWSER));
+
+            putUnlessNull(args, MAC_NSEXPORTABLETYPES,
+                    initialMap.get(MAC_NSEXPORTABLETYPES));
+
+            putUnlessNull(args, MAC_UTTYPECONFORMSTO,
+                    initialMap.get(MAC_UTTYPECONFORMSTO));
 
             ArrayList<Map<String, ? super Object>> associationList =
                 new ArrayList<Map<String, ? super Object>>();
@@ -264,6 +303,7 @@ public class Arguments {
         MODULE_PATH ("module-path", "p", OptionCategories.MODULAR),
 
         BIND_SERVICES ("bind-services", OptionCategories.PROPERTY, () -> {
+            showDeprecation("bind-services");
             setOptionValue("bind-services", true);
         }),
 
@@ -283,9 +323,6 @@ public class Arguments {
                     OptionCategories.PLATFORM_MAC),
 
         MAC_SIGNING_KEYCHAIN ("mac-signing-keychain",
-                    OptionCategories.PLATFORM_MAC),
-
-        MAC_APP_STORE_ENTITLEMENTS ("mac-app-store-entitlements",
                     OptionCategories.PLATFORM_MAC),
 
         WIN_MENU_HINT ("win-menu", OptionCategories.PLATFORM_WIN, () -> {
@@ -341,7 +378,7 @@ public class Arguments {
         private final String id;
         private final String shortId;
         private final OptionCategories category;
-        private final ArgAction action;
+        private final Runnable action;
         private static Arguments argContext;
 
         private CLIOptions(String id, OptionCategories category) {
@@ -354,12 +391,12 @@ public class Arguments {
         }
 
         private CLIOptions(String id,
-                OptionCategories category, ArgAction action) {
+                OptionCategories category, Runnable action) {
             this(id, null, category, action);
         }
 
         private CLIOptions(String id, String shortId,
-                           OptionCategories category, ArgAction action) {
+                           OptionCategories category, Runnable action) {
             this.id = id;
             this.shortId = shortId;
             this.action = action;
@@ -392,7 +429,7 @@ public class Arguments {
 
         void execute() {
             if (action != null) {
-                action.execute();
+                action.run();
             } else {
                 defaultAction();
             }
@@ -467,8 +504,6 @@ public class Arguments {
             // for current configuration.
 
             validateArguments();
-
-            addResources(deployParams, input, mainJarPath);
 
             List<Map<String, ? super Object>> launchersAsMap =
                     new ArrayList<>();
@@ -582,7 +617,11 @@ public class Arguments {
                         CLIOptions.PREDEFINED_RUNTIME_IMAGE.getIdWithPrefix(),
                         CLIOptions.BIND_SERVICES.getIdWithPrefix());
             }
-
+            if (allOptions.contains(CLIOptions.JLINK_OPTIONS)) {
+                throw new PackagerException("ERR_MutuallyExclusiveOptions",
+                        CLIOptions.PREDEFINED_RUNTIME_IMAGE.getIdWithPrefix(),
+                        CLIOptions.JLINK_OPTIONS.getIdWithPrefix());
+            }
         }
         if (hasMainJar && hasMainModule) {
             throw new PackagerException("ERR_BothMainJarAndModule");
@@ -673,35 +712,6 @@ public class Arguments {
         }
     }
 
-    private void addResources(DeployParams deployParams,
-            String inputdir, String mainJar) throws PackagerException {
-
-        if (inputdir == null || inputdir.isEmpty()) {
-            return;
-        }
-
-        File baseDir = new File(inputdir);
-
-        if (!baseDir.isDirectory()) {
-            throw new PackagerException("ERR_InputNotDirectory", inputdir);
-        }
-        if (!baseDir.canRead()) {
-            throw new PackagerException("ERR_CannotReadInputDir", inputdir);
-        }
-
-        List<String> fileNames;
-        fileNames = new ArrayList<>();
-        try (Stream<Path> files = Files.list(baseDir.toPath())) {
-            files.forEach(file -> fileNames.add(
-                    file.getFileName().toString()));
-        } catch (IOException e) {
-            Log.error("Unable to add resources: " + e.getMessage());
-        }
-        fileNames.forEach(file -> deployParams.addResource(baseDir, file));
-
-        deployParams.setClasspath(mainJar);
-    }
-
     static CLIOptions toCLIOption(String arg) {
         CLIOptions option;
         if ((option = argIds.get(arg)) == null) {
@@ -748,6 +758,13 @@ public class Arguments {
             }
         }
         return list;
+    }
+
+    static void putUnlessNull(Map<String, ? super Object> params,
+            String param, Object value) {
+        if (value != null) {
+            params.put(param, value);
+        }
     }
 
     private static String unquoteIfNeeded(String in) {
@@ -812,4 +829,8 @@ public class Arguments {
         return null;
     }
 
+    private static void showDeprecation(String option) {
+        Log.error(MessageFormat.format(I18N.getString("warning.deprecation"),
+                option));
+    }
 }

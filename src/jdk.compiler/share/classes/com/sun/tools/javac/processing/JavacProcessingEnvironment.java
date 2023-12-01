@@ -1429,21 +1429,25 @@ public class JavacProcessingEnvironment implements ProcessingEnvironment, Closea
 
         errorStatus = errorStatus || (compiler.errorCount() > 0);
 
-        round.finalCompiler();
 
         if (newSourceFiles.size() > 0)
             roots = roots.appendList(compiler.parseFiles(newSourceFiles));
 
         errorStatus = errorStatus || (compiler.errorCount() > 0);
 
-        // Free resources
-        this.close();
-
         if (errorStatus && compiler.errorCount() == 0) {
             compiler.log.nerrors++;
         }
 
-        compiler.enterTreesIfNeeded(roots);
+        if (compiler.continueAfterProcessAnnotations()) {
+            round.finalCompiler();
+            compiler.enterTrees(compiler.initModules(roots));
+        } else {
+            compiler.todo.clear();
+        }
+
+        // Free resources
+        this.close();
 
         if (!taskListener.isEmpty())
             taskListener.finished(new TaskEvent(TaskEvent.Kind.ANNOTATION_PROCESSING));
@@ -1636,6 +1640,13 @@ public class JavacProcessingEnvironment implements ProcessingEnvironment, Closea
                 }
                 if (node.sym != null) {
                     node.sym.completer = new ImplicitCompleter(topLevel);
+                    List<? extends RecordComponent> recordComponents = node.sym.getRecordComponents();
+                    for (RecordComponent rc : recordComponents) {
+                        List<JCAnnotation> originalAnnos = rc.getOriginalAnnos();
+                        originalAnnos.stream().forEach(a -> visitAnnotation(a));
+                    }
+                    // we should empty the list of permitted subclasses for next round
+                    node.sym.permitted = List.nil();
                 }
                 node.sym = null;
             }

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1999, 2019, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 1999, 2020, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -170,14 +170,14 @@ class LibraryCallKit : public GraphKit {
                                       int offset);
   Node* load_klass_from_mirror(Node* mirror, bool never_see_null,
                                RegionNode* region, int null_path) {
-    int offset = java_lang_Class::klass_offset_in_bytes();
+    int offset = java_lang_Class::klass_offset();
     return load_klass_from_mirror_common(mirror, never_see_null,
                                          region, null_path,
                                          offset);
   }
   Node* load_array_klass_from_mirror(Node* mirror, bool never_see_null,
                                      RegionNode* region, int null_path) {
-    int offset = java_lang_Class::array_klass_offset_in_bytes();
+    int offset = java_lang_Class::array_klass_offset();
     return load_klass_from_mirror_common(mirror, never_see_null,
                                          region, null_path,
                                          offset);
@@ -186,6 +186,7 @@ class LibraryCallKit : public GraphKit {
                                     int modifier_mask, int modifier_bits,
                                     RegionNode* region);
   Node* generate_interface_guard(Node* kls, RegionNode* region);
+  Node* generate_hidden_class_guard(Node* kls, RegionNode* region);
   Node* generate_array_guard(Node* kls, RegionNode* region) {
     return generate_array_guard_common(kls, region, false, false);
   }
@@ -783,6 +784,7 @@ bool LibraryCallKit::try_to_inline(int predicate) {
   case vmIntrinsics::_isInterface:
   case vmIntrinsics::_isArray:
   case vmIntrinsics::_isPrimitive:
+  case vmIntrinsics::_isHidden:
   case vmIntrinsics::_getSuperclass:
   case vmIntrinsics::_getClassAccessFlags:      return inline_native_Class_query(intrinsic_id());
 
@@ -3084,6 +3086,9 @@ Node* LibraryCallKit::generate_access_flags_guard(Node* kls, int modifier_mask, 
 Node* LibraryCallKit::generate_interface_guard(Node* kls, RegionNode* region) {
   return generate_access_flags_guard(kls, JVM_ACC_INTERFACE, 0, region);
 }
+Node* LibraryCallKit::generate_hidden_class_guard(Node* kls, RegionNode* region) {
+  return generate_access_flags_guard(kls, JVM_ACC_IS_HIDDEN_CLASS, 0, region);
+}
 
 //-------------------------inline_native_Class_query-------------------
 bool LibraryCallKit::inline_native_Class_query(vmIntrinsics::ID id) {
@@ -3118,6 +3123,9 @@ bool LibraryCallKit::inline_native_Class_query(vmIntrinsics::ID id) {
   case vmIntrinsics::_isPrimitive:
     prim_return_value = intcon(1);
     expect_prim = true;  // obviously
+    break;
+  case vmIntrinsics::_isHidden:
+    prim_return_value = intcon(0);
     break;
   case vmIntrinsics::_getSuperclass:
     prim_return_value = null();
@@ -3210,6 +3218,16 @@ bool LibraryCallKit::inline_native_Class_query(vmIntrinsics::ID id) {
   case vmIntrinsics::_isPrimitive:
     query_value = intcon(0); // "normal" path produces false
     break;
+
+  case vmIntrinsics::_isHidden:
+    // (To verify this code sequence, check the asserts in JVM_IsHiddenClass.)
+    if (generate_hidden_class_guard(kls, region) != NULL)
+      // A guard was added.  If the guard is taken, it was an hidden class.
+      phi->add_req(intcon(1));
+    // If we fall through, it's a plain class.
+    query_value = intcon(0);
+    break;
+
 
   case vmIntrinsics::_getSuperclass:
     // The rules here are somewhat unfortunate, but we can still do better
@@ -3369,7 +3387,7 @@ bool LibraryCallKit::inline_native_subtype_check() {
 
   const TypePtr* adr_type = TypeRawPtr::BOTTOM;   // memory type of loads
   const TypeKlassPtr* kls_type = TypeKlassPtr::OBJECT_OR_NULL;
-  int class_klass_offset = java_lang_Class::klass_offset_in_bytes();
+  int class_klass_offset = java_lang_Class::klass_offset();
 
   // First null-check both mirrors and load each mirror's klass metaobject.
   int which_arg;
@@ -4309,7 +4327,7 @@ bool LibraryCallKit::inline_native_clone(bool is_virtual) {
       set_control(array_ctl);
       Node* obj_length = load_array_length(obj);
       Node* obj_size  = NULL;
-      Node* alloc_obj = new_array(obj_klass, obj_length, 0, &obj_size);  // no arguments to push
+      Node* alloc_obj = new_array(obj_klass, obj_length, 0, &obj_size, /*deoptimize_on_exception=*/true);
 
       BarrierSetC2* bs = BarrierSet::barrier_set()->barrier_set_c2();
       if (bs->array_copy_requires_gc_barriers(true, T_OBJECT, true, BarrierSetC2::Parsing)) {
@@ -4325,7 +4343,7 @@ bool LibraryCallKit::inline_native_clone(bool is_virtual) {
           ac->set_clone_oop_array();
           Node* n = _gvn.transform(ac);
           assert(n == ac, "cannot disappear");
-          ac->connect_outputs(this);
+          ac->connect_outputs(this, /*deoptimize_on_exception=*/true);
 
           result_reg->init_req(_objArray_path, control());
           result_val->init_req(_objArray_path, alloc_obj);
@@ -5662,8 +5680,7 @@ bool LibraryCallKit::inline_updateByteBufferAdler32() {
 //----------------------------inline_reference_get----------------------------
 // public T java.lang.ref.Reference.get();
 bool LibraryCallKit::inline_reference_get() {
-  const int referent_offset = java_lang_ref_Reference::referent_offset;
-  guarantee(referent_offset > 0, "should have already been set");
+  const int referent_offset = java_lang_ref_Reference::referent_offset();
 
   // Get the argument:
   Node* reference_obj = null_check_receiver();

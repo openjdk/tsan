@@ -277,7 +277,7 @@ public final class Method extends Executable {
      * @throws GenericSignatureFormatError
      *     if the generic method signature does not conform to the format
      *     specified in
-     *     <cite>The Java&trade; Virtual Machine Specification</cite>
+     *     <cite>The Java Virtual Machine Specification</cite>
      * @throws TypeNotPresentException if the underlying method's
      *     return type refers to a non-existent type declaration
      * @throws MalformedParameterizedTypeException if the
@@ -686,9 +686,10 @@ public final class Method extends Executable {
 
     /**
      * {@inheritDoc}
-     * @throws NullPointerException  {@inheritDoc}
+     * @throws NullPointerException {@inheritDoc}
      * @since 1.5
      */
+    @Override
     public <T extends Annotation> T getAnnotation(Class<T> annotationClass) {
         return super.getAnnotation(annotationClass);
     }
@@ -697,6 +698,7 @@ public final class Method extends Executable {
      * {@inheritDoc}
      * @since 1.5
      */
+    @Override
     public Annotation[] getDeclaredAnnotations()  {
         return super.getDeclaredAnnotations();
     }

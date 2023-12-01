@@ -202,6 +202,19 @@ DEF_Agent_OnLoad(JavaVM *vm, char *tail, void * reserved) {
          */
         oldLen = (int)strlen(premainClass);
         newLen = modifiedUtf8LengthOfUtf8(premainClass, oldLen);
+        /*
+         * According to JVMS class name is represented as CONSTANT_Utf8_info,
+         * so its length is u2 (i.e. must be <= 0xFFFF).
+         * Negative oldLen or newLen means we got signed integer overflow
+         * (modifiedUtf8LengthOfUtf8 returns negative value if oldLen is negative).
+         */
+        if (oldLen < 0 || newLen < 0 || newLen > 0xFFFF) {
+            fprintf(stderr, "-javaagent: Premain-Class value is too big\n");
+            free(jarfile);
+            if (options != NULL) free(options);
+            freeAttributes(attributes);
+            return JNI_ERR;
+        }
         if (newLen == oldLen) {
             premainClass = strdup(premainClass);
         } else {
@@ -360,6 +373,19 @@ DEF_Agent_OnAttach(JavaVM* vm, char *args, void * reserved) {
          */
         oldLen = (int)strlen(agentClass);
         newLen = modifiedUtf8LengthOfUtf8(agentClass, oldLen);
+        /*
+         * According to JVMS class name is represented as CONSTANT_Utf8_info,
+         * so its length is u2 (i.e. must be <= 0xFFFF).
+         * Negative oldLen or newLen means we got signed integer overflow
+         * (modifiedUtf8LengthOfUtf8 returns negative value if oldLen is negative).
+         */
+        if (oldLen < 0 || newLen < 0 || newLen > 0xFFFF) {
+            fprintf(stderr, "Agent-Class value is too big\n");
+            free(jarfile);
+            if (options != NULL) free(options);
+            freeAttributes(attributes);
+            return AGENT_ERROR_BADJAR;
+        }
         if (newLen == oldLen) {
             agentClass = strdup(agentClass);
         } else {
@@ -485,6 +511,15 @@ jint loadAgent(JNIEnv* env, jstring path) {
     // The value of Launcher-Agent-Class is in UTF-8, convert it to modified UTF-8
     oldLen = (int) strlen(agentClass);
     newLen = modifiedUtf8LengthOfUtf8(agentClass, oldLen);
+    /*
+     * According to JVMS class name is represented as CONSTANT_Utf8_info,
+     * so its length is u2 (i.e. must be <= 0xFFFF).
+     * Negative oldLen or newLen means we got signed integer overflow
+     * (modifiedUtf8LengthOfUtf8 returns negative value if oldLen is negative).
+     */
+    if (oldLen < 0 || newLen < 0 || newLen > 0xFFFF) {
+        goto releaseAndReturn;
+    }
     if (newLen == oldLen) {
         agentClass = strdup(agentClass);
     } else {
@@ -527,16 +562,16 @@ jint loadAgent(JNIEnv* env, jstring path) {
     // initialization complete
     result = JNI_OK;
 
-    releaseAndReturn:
-        if (agentClass != NULL) {
-            free(agentClass);
-        }
-        if (attributes != NULL) {
-            freeAttributes(attributes);
-        }
-        if (jarfile != NULL) {
-            (*env)->ReleaseStringUTFChars(env, path, jarfile);
-        }
+releaseAndReturn:
+    if (agentClass != NULL) {
+        free(agentClass);
+    }
+    if (attributes != NULL) {
+        freeAttributes(attributes);
+    }
+    if (jarfile != NULL) {
+        (*env)->ReleaseStringUTFChars(env, path, jarfile);
+    }
 
     return result;
 }

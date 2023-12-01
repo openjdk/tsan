@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2000, 2019, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2000, 2020, Oracle and/or its affiliates. All rights reserved.
  * Copyright (c) 2012, 2019, SAP SE. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
@@ -1197,7 +1197,7 @@ void LIR_Assembler::stack2reg(LIR_Opr src, LIR_Opr dest, BasicType type) {
     addr = frame_map()->address_for_double_slot(src->double_stack_ix());
   }
 
-  bool unaligned = (addr.disp() - STACK_BIAS) % 8 != 0;
+  bool unaligned = addr.disp() % 8 != 0;
   load(addr.base(), addr.disp(), dest, dest->type(), true /*wide*/, unaligned);
 }
 
@@ -1209,7 +1209,7 @@ void LIR_Assembler::reg2stack(LIR_Opr from_reg, LIR_Opr dest, BasicType type, bo
   } else if (dest->is_double_word())  {
     addr = frame_map()->address_for_slot(dest->double_stack_ix());
   }
-  bool unaligned = (addr.disp() - STACK_BIAS) % 8 != 0;
+  bool unaligned = addr.disp() % 8 != 0;
   store(from_reg, addr.base(), addr.disp(), from_reg->type(), true /*wide*/, unaligned);
 }
 
@@ -1335,11 +1335,7 @@ void LIR_Assembler::return_op(LIR_Opr result) {
     __ pop_frame();
   }
 
-  if (SafepointMechanism::uses_thread_local_poll()) {
-    __ ld(polling_page, in_bytes(Thread::polling_page_offset()), R16_thread);
-  } else {
-    __ load_const_optimized(polling_page, (long)(address) os::get_polling_page(), R0);
-  }
+  __ ld(polling_page, in_bytes(Thread::polling_page_offset()), R16_thread);
 
   // Restore return pc relative to callers' sp.
   __ ld(return_pc, _abi(lr), R1_SP);
@@ -1362,11 +1358,7 @@ void LIR_Assembler::return_op(LIR_Opr result) {
 
 int LIR_Assembler::safepoint_poll(LIR_Opr tmp, CodeEmitInfo* info) {
   const Register poll_addr = tmp->as_register();
-  if (SafepointMechanism::uses_thread_local_poll()) {
-    __ ld(poll_addr, in_bytes(Thread::polling_page_offset()), R16_thread);
-  } else {
-    __ load_const_optimized(poll_addr, (intptr_t)os::get_polling_page(), R0);
-  }
+  __ ld(poll_addr, in_bytes(Thread::polling_page_offset()), R16_thread);
   if (info != NULL) {
     add_debug_info_for_branch(info);
   }
@@ -3094,7 +3086,7 @@ void LIR_Assembler::emit_profile_type(LIR_OpProfileType* op) {
   } else {
     __ cmpdi(CCR0, obj, 0);
     __ bne(CCR0, Lupdate);
-    __ stop("unexpect null obj", 0x9652);
+    __ stop("unexpect null obj");
 #endif
   }
 
@@ -3111,7 +3103,7 @@ void LIR_Assembler::emit_profile_type(LIR_OpProfileType* op) {
       metadata2reg(exact_klass->constant_encoding(), R0);
       __ cmpd(CCR0, klass, R0);
       __ beq(CCR0, ok);
-      __ stop("exact klass and actual klass differ", 0x8564);
+      __ stop("exact klass and actual klass differ");
       __ bind(ok);
     }
 #endif
@@ -3178,7 +3170,7 @@ void LIR_Assembler::emit_profile_type(LIR_OpProfileType* op) {
           __ clrrdi_(R0, tmp, exact_log2(-TypeEntries::type_mask));
           __ beq(CCR0, ok); // First time here.
 
-          __ stop("unexpected profiling mismatch", 0x7865);
+          __ stop("unexpected profiling mismatch");
           __ bind(ok);
         }
 #endif

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016, 2019, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2016, 2020, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -96,9 +96,6 @@ public class VMProps implements Callable<Map<String, String>> {
         // vm.hasSA is "true" if the VM contains the serviceability agent
         // and jhsdb.
         map.put("vm.hasSA", this::vmHasSA);
-        // vm.hasSAandCanAttach is "true" if the VM contains the serviceability agent
-        // and jhsdb and it can attach to the VM.
-        map.put("vm.hasSAandCanAttach", this::vmHasSAandCanAttach);
         // vm.hasJFR is "true" if JFR is included in the build of the VM and
         // so tests can be executed.
         map.put("vm.hasJFR", this::vmHasJFR);
@@ -271,18 +268,36 @@ public class VMProps implements Callable<Map<String, String>> {
         return CPUInfo.getFeatures().toString();
     }
 
+    private boolean isGcSupportedByGraal(GC gc) {
+        switch (gc) {
+            case Serial:
+            case Parallel:
+            case G1:
+                return true;
+            case Epsilon:
+            case Z:
+            case Shenandoah:
+                return false;
+            default:
+                throw new IllegalStateException("Unknown GC " + gc.name());
+        }
+    }
+
     /**
      * For all existing GC sets vm.gc.X property.
      * Example vm.gc.G1=true means:
      *    VM supports G1
      *    User either set G1 explicitely (-XX:+UseG1GC) or did not set any GC
+     *    G1 can be selected, i.e. it doesn't conflict with other VM flags
      *
      * @param map - property-value pairs
      */
     protected void vmGC(SafeMap map) {
+        var isGraalEnabled = Compiler.isGraalEnabled();
         for (GC gc: GC.values()) {
             map.put("vm.gc." + gc.name(),
                     () -> "" + (gc.isSupported()
+                            && (!isGraalEnabled || isGcSupportedByGraal(gc))
                             && (gc.isSelected() || GC.isSelectedErgonomically())));
         }
     }
@@ -316,19 +331,6 @@ public class VMProps implements Callable<Map<String, String>> {
      */
     protected String vmHasSA() {
         return "" + Platform.hasSA();
-    }
-
-    /**
-     * @return "true" if VM has a serviceability agent and it can
-     * attach to the VM.
-     */
-    protected String vmHasSAandCanAttach() {
-        try {
-            return "" + Platform.shouldSAAttach();
-        } catch (IOException e) {
-            e.printStackTrace();
-            return errorWithMessage("Checking whether SA can attach to the VM failed.:" + e);
-        }
     }
 
     /**

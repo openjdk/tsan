@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1997, 2019, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 1997, 2020, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -484,7 +484,7 @@ CodeBlob* CodeCache::next_blob(CodeHeap* heap, CodeBlob* cb) {
  */
 CodeBlob* CodeCache::allocate(int size, int code_blob_type, int orig_code_blob_type) {
   // Possibly wakes up the sweeper thread.
-  NMethodSweeper::notify(code_blob_type);
+  NMethodSweeper::report_allocation(code_blob_type);
   assert_locked_or_safepoint(CodeCache_lock);
   assert(size > 0, "Code cache allocation request must be > 0 but is %d", size);
   if (size <= 0) {
@@ -1036,7 +1036,7 @@ bool CodeCache::is_far_target(address target) {
 #endif
 }
 
-#ifdef INCLUDE_JVMTI
+#if INCLUDE_JVMTI
 // RedefineClasses support for unloading nmethods that are dependent on "old" methods.
 // We don't really expect this table to grow very large.  If it does, it can become a hashtable.
 static GrowableArray<CompiledMethod*>* old_compiled_method_table = NULL;
@@ -1073,8 +1073,8 @@ void CodeCache::old_nmethods_do(MetadataClosure* f) {
     length = old_compiled_method_table->length();
     for (int i = 0; i < length; i++) {
       CompiledMethod* cm = old_compiled_method_table->at(i);
-      // Only walk alive nmethods, the dead ones will get removed by the sweeper.
-      if (cm->is_alive()) {
+      // Only walk alive nmethods, the dead ones will get removed by the sweeper or GC.
+      if (cm->is_alive() && !cm->is_unloading()) {
         old_compiled_method_table->at(i)->metadata_do(f);
       }
     }

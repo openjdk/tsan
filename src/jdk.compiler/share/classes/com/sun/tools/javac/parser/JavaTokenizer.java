@@ -233,8 +233,8 @@ public class JavaTokenizer {
                     if (!multiline) {
                         lexError(reader.bp, Errors.IllegalEscChar);
                     } else {
-                        int start = reader.bp;
                         checkSourceLevel(reader.bp, Feature.TEXT_BLOCKS);
+                        int start = reader.bp;
                         if (reader.ch == '\r' && reader.peekChar() == '\n') {
                            reader.nextChar(translateEscapesNow);
                         }
@@ -402,6 +402,17 @@ public class JavaTokenizer {
         return count;
     }
 
+    /** Skip and process a line terminator.
+     */
+    private void skipLineTerminator() {
+        int start = reader.bp;
+        if (isCRLF()) {
+            reader.scanChar();
+        }
+        reader.scanChar();
+        processLineTerminator(start, reader.bp);
+    }
+
     /** Scan a string literal or text block.
      */
     private void scanString(int pos) {
@@ -416,35 +427,28 @@ public class JavaTokenizer {
         case 1: // Starting a string literal.
             break;
         case 2: // Starting an empty string literal.
-            // Start again but only consume one quote.
-            reader.reset(pos);
-            openCount = countChar('\"', 1);
-            break;
+            tk = Tokens.TokenKind.STRINGLITERAL;
+            return;
         case 3: // Starting a text block.
             // Check if preview feature is enabled for text blocks.
             checkSourceLevel(pos, Feature.TEXT_BLOCKS);
             isTextBlock = true;
             // Verify the open delimiter sequence.
-            boolean hasOpenEOLN = false;
-            while (reader.bp < reader.buflen && Character.isWhitespace(reader.ch)) {
-                hasOpenEOLN = isEOLN();
-                if (hasOpenEOLN) {
+            while (reader.bp < reader.buflen) {
+                char ch = reader.ch;
+                if (ch != ' ' && ch != '\t' && ch != FF) {
                     break;
                 }
                 reader.scanChar();
             }
-            // Error if the open delimiter sequence not is """<Whitespace>*<LineTerminator>.
-            if (!hasOpenEOLN) {
+            if (isEOLN()) {
+                skipLineTerminator();
+            } else {
+                // Error if the open delimiter sequence is not
+                //     """<white space>*<LineTerminator>.
                 lexError(reader.bp, Errors.IllegalTextBlockOpen);
                 return;
             }
-            // Skip line terminator.
-            int start = reader.bp;
-            if (isCRLF()) {
-                reader.scanChar();
-            }
-            reader.scanChar();
-            processLineTerminator(start, reader.bp);
             break;
         }
         // While characters are available.
@@ -466,13 +470,9 @@ public class JavaTokenizer {
                 if (openCount == 1) {
                     break;
                 }
-                 // Add line terminator to string buffer.
-                int start = reader.bp;
-                if (isCRLF()) {
-                    reader.scanChar();
-                }
-                reader.putChar('\n', true);
-                processLineTerminator(start, reader.bp);
+                skipLineTerminator();
+                // Add line terminator to string buffer.
+                reader.putChar('\n', false);
                 // Record first line terminator for error recovery.
                 if (firstEOLN == -1) {
                     firstEOLN = reader.bp;
