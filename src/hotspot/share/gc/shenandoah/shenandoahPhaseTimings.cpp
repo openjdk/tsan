@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017, 2020, Red Hat, Inc. All rights reserved.
+ * Copyright (c) 2017, 2021, Red Hat, Inc. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -69,7 +69,7 @@ ShenandoahPhaseTimings::ShenandoahPhaseTimings(uint max_workers) :
     if (is_worker_phase(Phase(i))) {
       int c = 0;
 #define SHENANDOAH_WORKER_DATA_INIT(type, title) \
-      if (c++ != 0) _worker_data[i + c] = new ShenandoahWorkerData(title, _max_workers);
+      if (c++ != 0) _worker_data[i + c] = new ShenandoahWorkerData(NULL, title, _max_workers);
       SHENANDOAH_PAR_PHASE_DO(,, SHENANDOAH_WORKER_DATA_INIT)
 #undef SHENANDOAH_WORKER_DATA_INIT
     }
@@ -97,22 +97,25 @@ bool ShenandoahPhaseTimings::is_worker_phase(Phase phase) {
   assert(phase >= 0 && phase < _num_phases, "Out of bounds");
   switch (phase) {
     case init_evac:
-    case scan_roots:
-    case update_roots:
-    case final_update_refs_roots:
-    case full_gc_scan_roots:
+    case finish_mark:
+    case purge_weak_par:
+    case full_gc_mark:
     case full_gc_update_roots:
     case full_gc_adjust_roots:
-    case degen_gc_scan_conc_roots:
+    case degen_gc_stw_mark:
+    case degen_gc_mark:
     case degen_gc_update_roots:
-    case full_gc_scan_conc_roots:
+    case full_gc_weakrefs:
     case full_gc_purge_class_unload:
     case full_gc_purge_weak_par:
-    case purge_class_unload:
-    case purge_weak_par:
+    case degen_gc_weakrefs:
+    case degen_gc_purge_class_unload:
+    case degen_gc_purge_weak_par:
     case heap_iteration_roots:
     case conc_mark_roots:
+    case conc_thread_roots:
     case conc_weak_roots_work:
+    case conc_weak_refs:
     case conc_strong_roots:
       return true;
     default:
@@ -122,12 +125,10 @@ bool ShenandoahPhaseTimings::is_worker_phase(Phase phase) {
 
 bool ShenandoahPhaseTimings::is_root_work_phase(Phase phase) {
   switch (phase) {
-    case scan_roots:
-    case update_roots:
+    case finish_mark:
     case init_evac:
-    case final_update_refs_roots:
     case degen_gc_update_roots:
-    case full_gc_scan_roots:
+    case full_gc_mark:
     case full_gc_update_roots:
     case full_gc_adjust_roots:
       return true;
@@ -269,6 +270,17 @@ void ShenandoahPhaseTimings::print_global_on(outputStream* out) const {
   out->cr();
   out->print_cr("  All times are wall-clock times, except per-root-class counters, that are sum over");
   out->print_cr("  all workers. Dividing the <total> over the root stage time estimates parallelism.");
+  out->cr();
+
+  out->print_cr("  Pacing delays are measured from entering the pacing code till exiting it. Therefore,");
+  out->print_cr("  observed pacing delays may be higher than the threshold when paced thread spent more");
+  out->print_cr("  time in the pacing code. It usually happens when thread is de-scheduled while paced,");
+  out->print_cr("  OS takes longer to unblock the thread, or JVM experiences an STW pause.");
+  out->cr();
+  out->print_cr("  Higher delay would prevent application outpacing the GC, but it will hide the GC latencies");
+  out->print_cr("  from the STW pause times. Pacing affects the individual threads, and so it would also be");
+  out->print_cr("  invisible to the usual profiling tools, but would add up to end-to-end application latency.");
+  out->print_cr("  Raise max pacing delay with care.");
   out->cr();
 
   for (uint i = 0; i < _num_phases; i++) {

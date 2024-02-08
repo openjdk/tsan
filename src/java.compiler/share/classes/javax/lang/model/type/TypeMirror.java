@@ -55,12 +55,20 @@ import javax.lang.model.util.Types;
  * @author Peter von der Ah&eacute;
  * @see Element
  * @see Types
+ * @jls 4.1 The Kinds of Types and Values
+ * @jls 4.2 Primitive Types and Values
+ * @jls 4.3 Reference Types and Values
+ * @jls 4.4 Type Variables
+ * @jls 4.5 Parameterized Types
+ * @jls 4.8 Raw Types
+ * @jls 4.9 Intersection Types
+ * @jls 10.1 Array Types
  * @since 1.6
  */
 public interface TypeMirror extends javax.lang.model.AnnotatedConstruct {
 
     /**
-     * Returns the {@code kind} of this type.
+     * {@return the {@code kind} of this type}
      *
      * <ul>
      *
@@ -101,8 +109,6 @@ public interface TypeMirror extends javax.lang.model.AnnotatedConstruct {
      * type} is {@link TypeKind#INTERSECTION INTERSECTION}.
      *
      * </ul>
-     *
-     * @return the kind of this type
      */
     TypeKind getKind();
 

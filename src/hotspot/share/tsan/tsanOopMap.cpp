@@ -27,6 +27,7 @@
 #include "gc/shared/gcTraceTime.inline.hpp"
 #include "gc/shared/gcId.hpp"
 #include "gc/shared/referenceProcessor.hpp"
+#include "memory/resourceArea.hpp"
 #include "oops/oop.inline.hpp"
 #include "runtime/mutexLocker.hpp"
 #include "runtime/safepointVerifiers.hpp"

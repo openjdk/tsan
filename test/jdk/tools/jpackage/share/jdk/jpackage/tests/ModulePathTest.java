@@ -28,12 +28,17 @@ import java.io.IOException;
 import java.nio.file.Path;
 import java.util.Collection;
 import java.util.List;
-import java.util.Objects;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
-import jdk.jpackage.test.Annotations.*;
-import jdk.jpackage.test.*;
+import jdk.jpackage.test.TKit;
+import jdk.jpackage.test.JavaAppDesc;
+import jdk.jpackage.test.HelloApp;
+import jdk.jpackage.test.JPackageCommand;
+import jdk.jpackage.test.PackageType;
+import jdk.jpackage.test.Annotations.Parameter;
+import jdk.jpackage.test.Annotations.Parameters;
+import jdk.jpackage.test.Annotations.Test;
 
 
 /*
@@ -41,7 +46,7 @@ import jdk.jpackage.test.*;
  * @summary jpackage with --module-path testing
  * @library ../../../../helpers
  * @build jdk.jpackage.test.*
- * @modules jdk.incubator.jpackage/jdk.incubator.jpackage.internal
+ * @modules jdk.jpackage/jdk.jpackage.internal
  * @compile ModulePathTest.java
  * @run main/othervm/timeout=360 -Xmx512m jdk.jpackage.test.Main
  *  --jpt-run=jdk.jpackage.tests.ModulePathTest

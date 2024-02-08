@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017, 2020, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2017, 2021, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -26,7 +26,8 @@
  * @test
  * @bug 8189131 8198240 8191844 8189949 8191031 8196141 8204923 8195774 8199779
  *      8209452 8209506 8210432 8195793 8216577 8222089 8222133 8222137 8222136
- *      8223499 8225392 8232019 8234245 8233223 8225068 8225069
+ *      8223499 8225392 8232019 8234245 8233223 8225068 8225069 8243321 8243320
+ *      8243559 8225072 8258630 8259312 8256421 8225081
  * @summary Check root CA entries in cacerts file
  */
 import java.io.ByteArrayInputStream;
@@ -43,6 +44,7 @@ import java.util.Date;
 import java.util.Enumeration;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.HexFormat;
 import java.util.Map;
 
 public class VerifyCACerts {
@@ -57,7 +59,10 @@ public class VerifyCACerts {
     // SHA-256 of cacerts, can be generated with
     // shasum -a 256 cacerts | sed -e 's/../&:/g' | tr '[:lower:]' '[:upper:]' | cut -c1-95
     private static final String CHECKSUM
-            = "60:EF:3A:F8:44:CF:79:6F:A3:55:AD:3A:80:61:A7:EE:69:2A:B4:E4:F4:01:C4:47:FF:F8:25:1E:AB:87:31:F2";
+            = "9B:C3:0B:24:D4:26:E4:A9:4F:2C:96:25:06:9B:08:E5:13:5B:0B:33:74:5F:78:DB:BD:91:CD:31:D4:37:07:28";
+
+    // Hex formatter to upper case with ":" delimiter
+    private static final HexFormat HEX = HexFormat.ofDelimiter(":").withUpperCase();
 
     // map of cert alias to SHA-256 fingerprint
     @SuppressWarnings("serial")
@@ -131,16 +136,6 @@ public class VerifyCACerts {
                     "A4:31:0D:50:AF:18:A6:44:71:90:37:2A:86:AF:AF:8B:95:1F:FB:43:1D:83:7F:1E:56:88:B4:59:71:ED:15:57");
             put("thawteprimaryrootcag3 [jdk]",
                     "4B:03:F4:58:07:AD:70:F2:1B:FC:2C:AE:71:C9:FD:E4:60:4C:06:4C:F5:FF:B6:86:BA:E5:DB:AA:D7:FD:D3:4C");
-            put("thawtepremiumserverca [jdk]",
-                    "3F:9F:27:D5:83:20:4B:9E:09:C8:A3:D2:06:6C:4B:57:D3:A2:47:9C:36:93:65:08:80:50:56:98:10:5D:BC:E9");
-            put("verisigntsaca [jdk]",
-                    "CB:6B:05:D9:E8:E5:7C:D8:82:B1:0B:4D:B7:0D:E4:BB:1D:E4:2B:A4:8A:7B:D0:31:8B:63:5B:F6:E7:78:1A:9D");
-            put("verisignclass2g2ca [jdk]",
-                    "3A:43:E2:20:FE:7F:3E:A9:65:3D:1E:21:74:2E:AC:2B:75:C2:0F:D8:98:03:05:BC:50:2C:AF:8C:2D:9B:41:A1");
-            put("verisignclass3ca [jdk]",
-                    "A4:B6:B3:99:6F:C2:F3:06:B3:FD:86:81:BD:63:41:3D:8C:50:09:CC:4F:A3:29:C2:CC:F0:E2:FA:1B:14:03:05");
-            put("verisignclass3g2ca [jdk]",
-                    "83:CE:3C:12:29:68:8A:59:3D:48:5F:81:97:3C:0F:91:95:43:1E:DA:37:CC:5E:36:43:0E:79:C7:A8:88:63:8B");
             put("verisignuniversalrootca [jdk]",
                     "23:99:56:11:27:A5:71:25:DE:8C:EF:EA:61:0D:DF:2F:A0:78:B5:C8:06:7F:4E:82:82:90:BF:B8:60:E8:4B:3C");
             put("verisignclass3g3ca [jdk]",
@@ -185,8 +180,6 @@ public class VerifyCACerts {
                     "3B:22:2E:56:67:11:E9:92:30:0D:C0:B1:5A:B9:47:3D:AF:DE:F8:C8:4D:0C:EF:7D:33:17:B4:C1:82:1D:14:36");
             put("swisssignsilverg2ca [jdk]",
                     "BE:6C:4D:A2:BB:B9:BA:59:B6:F3:93:97:68:37:42:46:C3:C0:05:99:3F:A9:8F:02:0D:1D:ED:BE:D4:8A:81:D5");
-            put("soneraclass2ca [jdk]",
-                    "79:08:B4:03:14:C1:38:10:0B:51:8D:07:35:80:7F:FB:FC:F8:51:8A:00:95:33:71:05:BA:38:6B:15:3D:D9:27");
             put("securetrustca [jdk]",
                     "F1:C1:B5:0A:E5:A2:0D:D8:03:0E:C9:F6:BC:24:82:3D:D3:67:B5:25:57:59:B4:E7:1B:61:FC:E9:F7:37:5D:73");
             put("xrampglobalca [jdk]",
@@ -245,6 +238,18 @@ public class VerifyCACerts {
                     "18:CE:6C:FE:7B:F1:4E:60:B2:E3:47:B8:DF:E8:68:CB:31:D0:2E:BB:3A:DA:27:15:69:F5:03:43:B4:6D:B3:A4");
             put("amazonrootca4 [jdk]",
                     "E3:5D:28:41:9E:D0:20:25:CF:A6:90:38:CD:62:39:62:45:8D:A5:C6:95:FB:DE:A3:C2:2B:0B:FB:25:89:70:92");
+            put("entrustrootcag4 [jdk]",
+                    "DB:35:17:D1:F6:73:2A:2D:5A:B9:7C:53:3E:C7:07:79:EE:32:70:A6:2F:B4:AC:42:38:37:24:60:E6:F0:1E:88");
+            put("sslrootrsaca [jdk]",
+                    "85:66:6A:56:2E:E0:BE:5C:E9:25:C1:D8:89:0A:6F:76:A8:7E:C1:6D:4D:7D:5F:29:EA:74:19:CF:20:12:3B:69");
+            put("sslrootevrsaca [jdk]",
+                    "2E:7B:F1:6C:C2:24:85:A7:BB:E2:AA:86:96:75:07:61:B0:AE:39:BE:3B:2F:E9:D0:CC:6D:4E:F7:34:91:42:5C");
+            put("sslrooteccca [jdk]",
+                    "34:17:BB:06:CC:60:07:DA:1B:96:1C:92:0B:8A:B4:CE:3F:AD:82:0E:4A:A3:0B:9A:CB:C4:A7:4E:BD:CE:BC:65");
+            put("haricarootca2015 [jdk]",
+                    "A0:40:92:9A:02:CE:53:B4:AC:F4:F2:FF:C6:98:1C:E4:49:6F:75:5E:6D:45:FE:0B:2A:69:2B:CD:52:52:3F:36");
+            put("haricaeccrootca2015 [jdk]",
+                    "44:B5:45:AA:8A:25:E6:5A:73:CA:15:DC:27:FC:36:D2:4C:1C:B9:95:3A:06:65:39:B1:15:82:DC:48:7B:48:33");
         }
     };
 
@@ -259,6 +264,12 @@ public class VerifyCACerts {
             add("addtrustexternalca [jdk]");
             // Valid until: Sat May 30 10:44:50 GMT 2020
             add("addtrustqualifiedca [jdk]");
+            // Valid until: Wed Mar 17 02:51:37 PDT 2021
+            add("luxtrustglobalrootca [jdk]");
+            // Valid until: Wed Mar 17 11:33:33 PDT 2021
+            add("quovadisrootca [jdk]");
+            // Valid until: Thu Sep 30 14:01:15 GMT 2021
+            add("identrustdstx3 [jdk]");
         }
     };
 
@@ -274,7 +285,7 @@ public class VerifyCACerts {
         md = MessageDigest.getInstance("SHA-256");
 
         byte[] data = Files.readAllBytes(Path.of(CACERTS));
-        String checksum = toHexString(md.digest(data));
+        String checksum = HEX.formatHex(md.digest(data));
         if (!checksum.equals(CHECKSUM)) {
             atLeastOneFailed = true;
             System.err.println("ERROR: wrong checksum\n" + checksum);
@@ -363,18 +374,7 @@ public class VerifyCACerts {
         }
         System.out.println("Checking fingerprint of " + alias);
         byte[] digest = md.digest(cert.getEncoded());
-        return fingerprint.equals(toHexString(digest));
+        return fingerprint.equals(HEX.formatHex(digest));
     }
 
-    private static String toHexString(byte[] block) {
-        StringBuilder buf = new StringBuilder();
-        int len = block.length;
-        for (int i = 0; i < len; i++) {
-            buf.append(String.format("%02X", block[i]));
-            if (i < len - 1) {
-                buf.append(":");
-            }
-        }
-        return buf.toString();
-    }
 }

@@ -29,6 +29,7 @@
 #include "c1/c1_LIRAssembler.hpp"
 #include "c1/c1_MacroAssembler.hpp"
 #include "c1/c1_Runtime1.hpp"
+#include "classfile/javaClasses.hpp"
 #include "memory/universe.hpp"
 #include "nativeInst_arm.hpp"
 #include "runtime/sharedRuntime.hpp"
@@ -36,6 +37,10 @@
 #include "vmreg_arm.inline.hpp"
 
 #define __ ce->masm()->
+
+void C1SafepointPollStub::emit_code(LIR_Assembler* ce) {
+  ShouldNotReachHere();
+}
 
 void CounterOverflowStub::emit_code(LIR_Assembler* ce) {
   __ bind(_entry);
@@ -416,7 +421,7 @@ void ArrayCopyStub::emit_code(LIR_Assembler* ce) {
 
   VMRegPair args[5];
   BasicType signature[5] = { T_OBJECT, T_INT, T_OBJECT, T_INT, T_INT };
-  SharedRuntime::java_calling_convention(signature, args, 5, true);
+  SharedRuntime::java_calling_convention(signature, args, 5);
 
   Register r[5];
   r[0] = src()->as_pointer_register();

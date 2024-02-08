@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2020, 2021, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -25,16 +25,16 @@
  * @test
  * @bug 8225056
  * @compile planets/OuterPlanets.jcod planets/Mars.jcod
- * @compile --enable-preview -source ${jdk.version} planets/Neptune.java asteroids/Pluto.java
- * @run main/othervm --enable-preview SealedUnnamedModuleTest
+ * @compile planets/Neptune.java asteroids/Pluto.java asteroids/Charon.java
+ * @run main SealedUnnamedModuleTest
  */
 
 public class SealedUnnamedModuleTest {
 
     public static void main(String args[]) throws Throwable {
 
-        // Classes Neptune, Mars, and Pluto all try to extend sealed class OuterPlanets.
-        // Class OuterPlanets permits Nepturn and Pluto.
+        // Classes Neptune, Mars, Pluto, and Charon all try to extend sealed class OuterPlanets.
+        // Class OuterPlanets permits Nepturn, Pluto, and Charon.
 
         // Test permitted subclass and superclass in unnamed module and same package.
         // This should succeed.
@@ -61,5 +61,9 @@ public class SealedUnnamedModuleTest {
                 throw new RuntimeException("Wrong IncompatibleClassChangeError exception thrown: " + e.getMessage());
             }
         }
+
+        // Test public permitted subclass and superclass in same unnamed module but
+        // in different packages.  This should succeed.
+        Class charon = Class.forName("asteroids.Charon");
     }
 }

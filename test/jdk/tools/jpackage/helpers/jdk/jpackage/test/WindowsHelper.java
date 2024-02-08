@@ -25,7 +25,11 @@ package jdk.jpackage.test;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.*;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
 import java.util.function.BiConsumer;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -36,7 +40,7 @@ public class WindowsHelper {
 
     static String getBundleName(JPackageCommand cmd) {
         cmd.verifyIsOfType(PackageType.WINDOWS);
-        return String.format("%s-%s%s", cmd.name(), cmd.version(),
+        return String.format("%s-%s%s", cmd.installerName(), cmd.version(),
                 cmd.packageType().getSuffix());
     }
 
@@ -59,12 +63,17 @@ public class WindowsHelper {
 
     private static void runMsiexecWithRetries(Executor misexec) {
         Executor.Result result = null;
-        for (int attempt = 0; attempt != 3; ++attempt) {
+        for (int attempt = 0; attempt < 8; ++attempt) {
             result = misexec.executeWithoutExitCodeCheck();
-            if (result.exitCode == 1618) {
+
+            // The given Executor may either be of an msiexe command or an
+            // unpack.bat script containing the msiexec command. In the later
+            // case, when misexec returns 1618, the unpack.bat may return 1603
+            if ((result.exitCode == 1618) || (result.exitCode == 1603)) {
                 // Another installation is already in progress.
                 // Wait a little and try again.
-                ThrowingRunnable.toRunnable(() -> Thread.sleep(3000)).run();
+                Long timeout = 1000L * (attempt + 3); // from 3 to 10 seconds
+                ThrowingRunnable.toRunnable(() -> Thread.sleep(timeout)).run();
                 continue;
             }
             break;
@@ -105,12 +114,18 @@ public class WindowsHelper {
     }
 
     static PackageHandlers createExePackageHandlers() {
-        PackageHandlers exe = new PackageHandlers();
-        exe.installHandler = cmd -> {
+        BiConsumer<JPackageCommand, Boolean> installExe = (cmd, install) -> {
             cmd.verifyIsOfType(PackageType.WIN_EXE);
-            new Executor().setExecutable(cmd.outputBundle()).execute();
+            Executor exec = new Executor().setExecutable(cmd.outputBundle());
+            if (!install) {
+                exec.addArgument("uninstall");
+            }
+            runMsiexecWithRetries(exec);
         };
 
+        PackageHandlers exe = new PackageHandlers();
+        exe.installHandler = cmd -> installExe.accept(cmd, true);
+        exe.uninstallHandler = cmd -> installExe.accept(cmd, false);
         return exe;
     }
 
@@ -130,16 +145,17 @@ public class WindowsHelper {
 
     static class DesktopIntegrationVerifier {
 
-        DesktopIntegrationVerifier(JPackageCommand cmd) {
+        DesktopIntegrationVerifier(JPackageCommand cmd, String name) {
             cmd.verifyIsOfType(PackageType.WINDOWS);
             this.cmd = cmd;
+            this.name = (name == null ? cmd.name() : name);
             verifyStartMenuShortcut();
             verifyDesktopShortcut();
             verifyFileAssociationsRegistry();
         }
 
         private void verifyDesktopShortcut() {
-            boolean appInstalled = cmd.appLauncherPath().toFile().exists();
+            boolean appInstalled = cmd.appLauncherPath(name).toFile().exists();
             if (cmd.hasArgument("--win-shortcut")) {
                 if (isUserLocalInstall(cmd)) {
                     verifyUserLocalDesktopShortcut(appInstalled);
@@ -155,7 +171,7 @@ public class WindowsHelper {
         }
 
         private Path desktopShortcutPath() {
-            return Path.of(cmd.name() + ".lnk");
+            return Path.of(name + ".lnk");
         }
 
         private void verifyShortcut(Path path, boolean exists) {
@@ -179,7 +195,7 @@ public class WindowsHelper {
         }
 
         private void verifyStartMenuShortcut() {
-            boolean appInstalled = cmd.appLauncherPath().toFile().exists();
+            boolean appInstalled = cmd.appLauncherPath(name).toFile().exists();
             if (cmd.hasArgument("--win-menu")) {
                 if (isUserLocalInstall(cmd)) {
                     verifyUserLocalStartMenuShortcut(appInstalled);
@@ -196,14 +212,14 @@ public class WindowsHelper {
 
         private Path startMenuShortcutPath() {
             return Path.of(cmd.getArgumentValue("--win-menu-group",
-                    () -> "Unknown"), cmd.name() + ".lnk");
+                    () -> "Unknown"), name + ".lnk");
         }
 
         private void verifyStartMenuShortcut(Path shortcutsRoot, boolean exists) {
             Path shortcutPath = shortcutsRoot.resolve(startMenuShortcutPath());
             verifyShortcut(shortcutPath, exists);
             if (!exists) {
-                TKit.assertPathExists(shortcutPath.getParent(), false);
+                TKit.assertPathNotEmptyDirectory(shortcutPath.getParent());
             }
         }
 
@@ -224,7 +240,7 @@ public class WindowsHelper {
         }
 
         private void verifyFileAssociationsRegistry(Path faFile) {
-            boolean appInstalled = cmd.appLauncherPath().toFile().exists();
+            boolean appInstalled = cmd.appLauncherPath(name).toFile().exists();
             try {
                 TKit.trace(String.format(
                         "Get file association properties from [%s] file",
@@ -275,6 +291,7 @@ public class WindowsHelper {
         }
 
         private final JPackageCommand cmd;
+        private final String name;
     }
 
     private static String queryRegistryValue(String keyPath, String valueName) {

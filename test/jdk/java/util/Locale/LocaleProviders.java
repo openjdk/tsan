@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012, 2020, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2012, 2021, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -22,9 +22,15 @@
  */
 import java.text.*;
 import java.text.spi.*;
+import java.time.LocalDate;
+import java.time.ZoneId;
+import java.time.ZonedDateTime;
+import java.time.format.DateTimeFormatter;
+import java.time.format.FormatStyle;
+import java.time.temporal.WeekFields;
 import java.util.*;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.logging.Level;
-import java.util.logging.LogManager;
 import java.util.logging.LogRecord;
 import java.util.logging.StreamHandler;
 import java.util.spi.*;
@@ -100,6 +106,14 @@ public class LocaleProviders {
 
             case "bug8245241Test":
                 bug8245241Test(args[1]);
+                break;
+
+            case "bug8248695Test":
+                bug8248695Test();
+                break;
+
+            case "bug8257964Test":
+                bug8257964Test();
                 break;
 
             default:
@@ -243,8 +257,7 @@ public class LocaleProviders {
     static void bug8013903Test() {
         if (IS_WINDOWS) {
             Date sampleDate = new Date(0x10000000000L);
-            String hostResult = "\u5e73\u6210 16.11.03 (Wed) AM 11:53:47";
-            String jreResult = "\u5e73\u6210 16.11.03 (\u6c34) \u5348\u524d 11:53:47";
+            String expected = "\u5e73\u6210 16.11.03 (\u6c34) \u5348\u524d 11:53:47";
             Locale l = new Locale("ja", "JP", "JP");
             SimpleDateFormat sdf = new SimpleDateFormat("GGGG yyyy.MMM.dd '('E')' a hh:mm:ss", l);
             sdf.setTimeZone(TimeZone.getTimeZone("America/Los_Angeles"));
@@ -252,15 +265,15 @@ public class LocaleProviders {
             System.out.println(result);
             if (LocaleProviderAdapter.getAdapterPreference()
                 .contains(LocaleProviderAdapter.Type.JRE)) {
-                if (!jreResult.equals(result)) {
+                if (!expected.equals(result)) {
                     throw new RuntimeException("Format failed. result: \"" +
-                        result + "\", expected: \"" + jreResult);
+                        result + "\", expected: \"" + expected);
                 }
             } else {
                 // Windows display names. Subject to change if Windows changes its format.
-                if (!hostResult.equals(result)) {
+                if (!expected.equals(result)) {
                     throw new RuntimeException("Format failed. result: \"" +
-                        result + "\", expected: \"" + hostResult);
+                        result + "\", expected: \"" + expected);
                 }
             }
         }
@@ -386,22 +399,81 @@ public class LocaleProviders {
     }
 
     static void bug8245241Test(String expected) {
-        LogRecord[] lra = new LogRecord[1];
-        StreamHandler handler = new StreamHandler() {
+        // this will ensure LocaleProviderAdapter initialization
+        DateFormat.getDateInstance();
+        LogConfig.handler.flush();
+
+        if (LogConfig.logRecordList.stream()
+                .noneMatch(r -> r.getLevel() == Level.INFO &&
+                                r.getMessage().equals(expected))) {
+            throw new RuntimeException("Expected log was not emitted.");
+        }
+    }
+
+    // Set the root logger on loading the logging class
+    public static class LogConfig {
+        final static CopyOnWriteArrayList<LogRecord> logRecordList = new CopyOnWriteArrayList<>();
+        final static StreamHandler handler = new StreamHandler() {
             @Override
             public void publish(LogRecord record) {
-                lra[0] = record;
+                logRecordList.add(record);
+                System.out.println("LogRecord: " + record.getMessage());
             }
         };
-        getLogManager().getLogger("").addHandler(handler);
+        static {
+            getLogManager().getLogger("").addHandler(handler);
+        }
+    }
 
-        DateFormat.getDateInstance(); // this will init LocaleProviderAdapter
-        handler.flush();
+    static void bug8248695Test() {
+        Locale l = Locale.getDefault(Locale.Category.FORMAT);
+        LocaleProviderAdapter lda = LocaleProviderAdapter.getAdapter(DateFormatProvider.class, l);
+        LocaleProviderAdapter.Type type = lda.getAdapterType();
+        if (type == LocaleProviderAdapter.Type.HOST) {
+            System.out.println("Locale: " + l);
+            var ld = LocalDate.now();
+            var zdt = ZonedDateTime.now(ZoneId.of("America/Los_Angeles"));
+            var df = DateTimeFormatter.ofLocalizedDate(FormatStyle.FULL).withLocale(l);
+            var tf = DateTimeFormatter.ofLocalizedTime(FormatStyle.FULL).withLocale(l);
+            var dtf = DateTimeFormatter.ofLocalizedDateTime(FormatStyle.FULL).withLocale(l);
 
-        if (lra[0] == null ||
-            lra[0].getLevel() != Level.INFO ||
-            !lra[0].getMessage().equals(expected)) {
-            throw new RuntimeException("Expected log was not emitted. LogRecord: " + lra[0]);
+            // Checks there's no "unsupported temporal field" exception thrown, such as HourOfDay
+            System.out.println(df.format(ld));
+            System.out.println(tf.format(zdt));
+
+            // Checks there's no "Too many pattern letters: aa" exception thrown, if
+            // underlying OS provides the "am/pm" pattern.
+            System.out.println(dtf.format(zdt));
+        }
+    }
+
+    // Run only if the platform locale is en-GB
+    static void bug8257964Test() {
+        var defLoc = Locale.getDefault(Locale.Category.FORMAT);
+        var type = LocaleProviderAdapter.getAdapter(CalendarNameProvider.class, Locale.UK)
+                .getAdapterType();
+        if (defLoc.equals(Locale.UK) &&
+                type == LocaleProviderAdapter.Type.HOST &&
+                (IS_WINDOWS || IS_MAC)) {
+            Calendar instance = Calendar.getInstance(Locale.UK);
+            int result = instance.getMinimalDaysInFirstWeek();
+            if (result != 4) {
+                throw new RuntimeException("MinimalDaysInFirstWeek for Locale.UK is incorrect. " +
+                        "returned: " + result);
+            }
+
+            LocalDate date = LocalDate.of(2020,12,31);
+            result = date.get(WeekFields.of(Locale.UK).weekOfWeekBasedYear());
+            if (result != 53) {
+                throw new RuntimeException("weekNumber is incorrect. " +
+                        "returned: " + result);
+            }
+            System.out.println("bug8257964Test succeeded.");
+        } else {
+            System.out.println("Test ignored. Either :-\n" +
+                    "Default format locale is not Locale.UK: " + defLoc + ", or\n" +
+                    "OS is neither macOS/Windows, or\n" +
+                    "provider is not HOST: " + type);
         }
     }
 }

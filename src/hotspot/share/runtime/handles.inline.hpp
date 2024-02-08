@@ -26,6 +26,7 @@
 #define SHARE_RUNTIME_HANDLES_INLINE_HPP
 
 #include "runtime/handles.hpp"
+
 #include "runtime/thread.hpp"
 #include "oops/metadata.hpp"
 #include "oops/oop.hpp"
@@ -66,10 +67,6 @@ inline name##Handle::name##Handle(Thread* thread, type* obj) : _value(obj), _thr
 
 DEF_METADATA_HANDLE_FN(method, Method)
 DEF_METADATA_HANDLE_FN(constantPool, ConstantPool)
-
-inline HandleMark::HandleMark() {
-  initialize(Thread::current());
-}
 
 inline void HandleMark::push() {
   // This is intentionally a NOP. pop_and_restore will reset

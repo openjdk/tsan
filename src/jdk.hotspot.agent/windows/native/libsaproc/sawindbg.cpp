@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2002, 2020, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2002, 2021, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -36,12 +36,16 @@
 #elif _M_AMD64
   #include "sun_jvm_hotspot_debugger_amd64_AMD64ThreadContext.h"
   #define NPRGREG sun_jvm_hotspot_debugger_amd64_AMD64ThreadContext_NPRGREG
+#elif _M_ARM64
+  #include "sun_jvm_hotspot_debugger_aarch64_AARCH64ThreadContext.h"
+  #define NPRGREG sun_jvm_hotspot_debugger_aarch64_AARCH64ThreadContext_NPRGREG
 #else
   #error "SA windbg back-end is not supported for your cpu!"
 #endif
 
 #include <limits.h>
 #include <windows.h>
+#include <inttypes.h>
 
 #define DEBUG_NO_IMPLEMENTATION
 #include <dbgeng.h>
@@ -97,7 +101,7 @@ class AutoJavaString {
 public:
   // check env->ExceptionOccurred() after ctor
   AutoJavaString(JNIEnv* env, jstring str)
-    : m_env(env), m_str(str), m_buf(env->GetStringUTFChars(str, nullptr)) {
+    : m_env(env), m_str(str), m_buf(str == nullptr ? nullptr : env->GetStringUTFChars(str, nullptr)) {
   }
 
   ~AutoJavaString() {
@@ -499,6 +503,7 @@ static bool addLoadObjects(JNIEnv* env, jobject obj) {
     env->CallVoidMethod(obj, addLoadObject_ID, strName, (jlong) params[u].Size,
                         (jlong) params[u].Base);
     CHECK_EXCEPTION_(false);
+    env->DeleteLocalRef(strName);
   }
 
   return true;
@@ -625,6 +630,7 @@ static bool addThreads(JNIEnv* env, jobject obj) {
 
     env->CallVoidMethod(obj, setThreadIntegerRegisterSet_ID, (jlong)ptrThreadIds[t], regs);
     CHECK_EXCEPTION_(false);
+    env->DeleteLocalRef(regs);
 
     ULONG sysId;
     COM_VERIFY_OK_(ptrIDebugSystemObjects->GetCurrentThreadSystemId(&sysId),
@@ -764,9 +770,16 @@ JNIEXPORT jlong JNICALL Java_sun_jvm_hotspot_debugger_windbg_WindbgDebuggerLocal
   CHECK_EXCEPTION_(0);
 
   ULONG id = 0;
-  COM_VERIFY_OK_(ptrIDebugSystemObjects->GetThreadIdBySystemId((ULONG)sysId, &id),
-                 "Windbg Error: GetThreadIdBySystemId failed!", 0);
-
+  HRESULT hr = ptrIDebugSystemObjects->GetThreadIdBySystemId((ULONG)sysId, &id);
+  if (hr != S_OK) {
+    // This is not considered fatal and does happen on occassion, usually with an
+    // 0x80004002 "No such interface supported". The root cause is not fully understood,
+    // but by ignoring this error and returning NULL, stacking walking code will get
+    // null registers and fallback to using the "last java frame" if setup.
+   printf("WARNING: GetThreadIdBySystemId failed with 0x%x for sysId (%" PRIu64 ")\n",
+           hr, sysId);
+    return -1;
+  }
   return (jlong) id;
 }
 
