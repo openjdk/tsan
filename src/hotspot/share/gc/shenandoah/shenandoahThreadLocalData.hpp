@@ -27,6 +27,7 @@
 
 #include "gc/shared/plab.hpp"
 #include "gc/shared/gcThreadLocalData.hpp"
+#include "gc/shared/gc_globals.hpp"
 #include "gc/shenandoah/shenandoahBarrierSet.hpp"
 #include "gc/shenandoah/shenandoahCodeRoots.hpp"
 #include "gc/shenandoah/shenandoahSATBMarkQueueSet.hpp"
@@ -43,12 +44,12 @@ private:
   // Evacuation OOM state
   uint8_t                 _oom_scope_nesting_level;
   bool                    _oom_during_evac;
-  ShenandoahSATBMarkQueue _satb_mark_queue;
+  SATBMarkQueue           _satb_mark_queue;
   PLAB* _gclab;
   size_t _gclab_size;
   uint  _worker_id;
-  bool _force_satb_flush;
   int  _disarmed_value;
+  double _paced_time;
 
   ShenandoahThreadLocalData() :
     _gc_state(0),
@@ -58,8 +59,8 @@ private:
     _gclab(NULL),
     _gclab_size(0),
     _worker_id(INVALID_WORKER_ID),
-    _force_satb_flush(false),
-    _disarmed_value(0) {
+    _disarmed_value(0),
+    _paced_time(0) {
 
     // At least on x86_64, nmethod entry barrier encodes _disarmed_value offset
     // in instruction as disp8 immed
@@ -112,14 +113,6 @@ public:
     return data(thread)->_worker_id;
   }
 
-  static void set_force_satb_flush(Thread* thread, bool v) {
-    data(thread)->_force_satb_flush = v;
-  }
-
-  static bool is_force_satb_flush(Thread* thread) {
-    return data(thread)->_force_satb_flush;
-  }
-
   static void initialize_gclab(Thread* thread) {
     assert (thread->is_Java_thread() || thread->is_Worker_thread(), "Only Java and GC worker threads are allowed to get GCLABs");
     assert(data(thread)->_gclab == NULL, "Only initialize once");
@@ -137,6 +130,18 @@ public:
 
   static void set_gclab_size(Thread* thread, size_t v) {
     data(thread)->_gclab_size = v;
+  }
+
+  static void add_paced_time(Thread* thread, double v) {
+    data(thread)->_paced_time += v;
+  }
+
+  static double paced_time(Thread* thread) {
+    return data(thread)->_paced_time;
+  }
+
+  static void reset_paced_time(Thread* thread) {
+    data(thread)->_paced_time = 0;
   }
 
   static void set_disarmed_value(Thread* thread, int value) {

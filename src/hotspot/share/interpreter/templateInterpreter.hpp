@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1997, 2019, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 1997, 2020, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -31,7 +31,7 @@
 // This file contains the platform-independent parts
 // of the template interpreter and the template interpreter generator.
 
-#ifndef CC_INTERP
+#ifndef ZERO
 
 class InterpreterMacroAssembler;
 class InterpreterCodelet;
@@ -48,7 +48,8 @@ class EntryPoint {
   // Construction
   EntryPoint();
   EntryPoint(address bentry, address zentry, address centry, address sentry, address aentry, address ientry, address lentry, address fentry, address dentry, address ventry);
-
+  // Will use the ientry for each of [bzcs]entry
+  EntryPoint(address aentry, address ientry, address lentry, address fentry, address dentry, address ventry);
   // Attributes
   address entry(TosState state) const;                // return target address for a given tosca state
   void    set_entry(TosState state, address entry);   // set    target address for a given tosca state
@@ -195,6 +196,6 @@ class TemplateInterpreter: public AbstractInterpreter {
   static int InterpreterCodeSize;
 };
 
-#endif // !CC_INTERP
+#endif // !ZERO
 
 #endif // SHARE_INTERPRETER_TEMPLATEINTERPRETER_HPP

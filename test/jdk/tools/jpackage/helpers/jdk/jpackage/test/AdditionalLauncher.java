@@ -25,9 +25,14 @@ package jdk.jpackage.test;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 import java.util.function.BiConsumer;
 import java.util.stream.Stream;
+import jdk.jpackage.internal.ApplicationLayout;
 import jdk.jpackage.test.Functional.ThrowingBiConsumer;
 
 public final class AdditionalLauncher {
@@ -106,6 +111,7 @@ public final class AdditionalLauncher {
     }
 
     public void applyTo(PackageTest test) {
+        test.addLauncherName(name);
         test.addInitializer(this::initialize);
         test.addInstallVerifier(this::verify);
     }

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2007, 2019, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2007, 2021, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -92,6 +92,7 @@ class IdealGraphPrinter : public CHeapObj<mtCompiler> {
   PhaseChaitin* _chaitin;
   bool _traverse_outs;
   Compile *C;
+  double _max_freq;
 
   void print_method(ciMethod *method, int bci, InlineTree *tree);
   void print_inline_tree(InlineTree *tree);
@@ -126,7 +127,6 @@ class IdealGraphPrinter : public CHeapObj<mtCompiler> {
   void end_method();
   void print_method(const char *name, int level = 0);
   void print(const char *name, Node *root);
-  bool should_print(int level);
   void set_compile(Compile* compile) {C = compile; }
   void update_compiled_method(ciMethod* current_method);
 };

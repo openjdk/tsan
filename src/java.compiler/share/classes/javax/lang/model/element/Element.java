@@ -37,7 +37,7 @@ import javax.lang.model.util.*;
 
 /**
  * Represents a program element such as a module, package, class, or method.
- * Each element represents a static, language-level construct
+ * Each element represents a compile-time language-level construct
  * (and not, for example, a runtime construct of the virtual machine).
  *
  * <p> Elements should be compared using the {@link #equals(Object)}
@@ -61,8 +61,7 @@ import javax.lang.model.util.*;
  */
 public interface Element extends javax.lang.model.AnnotatedConstruct {
     /**
-     * Returns the type defined by this element.
-     * @return the type defined by this element
+     * {@return the type defined by this element}
      *
      * @see Types
      * @see ExecutableElement#asType
@@ -75,7 +74,7 @@ public interface Element extends javax.lang.model.AnnotatedConstruct {
     TypeMirror asType();
 
     /**
-     * Returns the {@code kind} of this element.
+     * {@return the {@code kind} of this element}
      *
      * <ul>
      *
@@ -113,8 +112,6 @@ public interface Element extends javax.lang.model.AnnotatedConstruct {
      * RECORD_COMPONENT}.
      *
      * </ul>
-     *
-     * @return the kind of this element
      */
     ElementKind getKind();
 
@@ -128,16 +125,17 @@ public interface Element extends javax.lang.model.AnnotatedConstruct {
     Set<Modifier> getModifiers();
 
     /**
-     * Returns the simple (unqualified) name of this element.  The
-     * name of a generic type does not include any reference to its
-     * formal type parameters.
+     * {@return the simple (unqualified) name of this element} The
+     * name of a generic class or interface does not include any
+     * reference to its formal type parameters.
      *
-     * For example, the simple name of the type element {@code
-     * java.util.Set<E>} is {@code "Set"}.
+     * For example, the simple name of the type element representing
+     * {@code java.util.Set<E>} is {@code "Set"}.
      *
      * If this element represents an unnamed {@linkplain
      * PackageElement#getSimpleName package} or unnamed {@linkplain
-     * ModuleElement#getSimpleName module}, an empty name is returned.
+     * ModuleElement#getSimpleName module}, an <a
+     * href=Name.html#empty_name>empty name</a> is returned.
      *
      * If it represents a {@linkplain ExecutableElement#getSimpleName
      * constructor}, the name "{@code <init>}" is returned.  If it
@@ -146,9 +144,9 @@ public interface Element extends javax.lang.model.AnnotatedConstruct {
      *
      * If it represents an {@linkplain TypeElement#getSimpleName
      * anonymous class} or {@linkplain ExecutableElement#getSimpleName
-     * instance initializer}, an empty name is returned.
+     * instance initializer}, an <a href=Name.html#empty_name>empty
+     * name</a> is returned.
      *
-     * @return the simple name of this element
      * @see PackageElement#getSimpleName
      * @see ExecutableElement#getSimpleName
      * @see TypeElement#getSimpleName
@@ -156,7 +154,6 @@ public interface Element extends javax.lang.model.AnnotatedConstruct {
      * @see ModuleElement#getSimpleName
      * @see RecordComponentElement#getSimpleName
      * @revised 9
-     * @spec JPMS
      */
     Name getSimpleName();
 
@@ -169,7 +166,7 @@ public interface Element extends javax.lang.model.AnnotatedConstruct {
      * element is returned.
      *
      * <li> If this is a {@linkplain TypeElement#getEnclosingElement
-     * top-level type}, its package is returned.
+     * top-level class or interface}, its package is returned.
      *
      * <li> If this is a {@linkplain
      * PackageElement#getEnclosingElement package}, its module is
@@ -187,7 +184,7 @@ public interface Element extends javax.lang.model.AnnotatedConstruct {
      *
      * <li> If this is a {@linkplain
      * RecordComponentElement#getEnclosingElement record component},
-     * {@linkplain TypeElement the type} which declares the
+     * {@linkplain TypeElement the record class} which declares the
      * record component is returned.
      *
      * <li> If this is a {@linkplain ModuleElement#getEnclosingElement
@@ -198,7 +195,6 @@ public interface Element extends javax.lang.model.AnnotatedConstruct {
      * @return the enclosing element, or {@code null} if there is none
      * @see Elements#getPackageOf
      * @revised 9
-     * @spec JPMS
      */
     Element getEnclosingElement();
 
@@ -208,7 +204,7 @@ public interface Element extends javax.lang.model.AnnotatedConstruct {
      *
      * A {@linkplain TypeElement#getEnclosedElements class or
      * interface} is considered to enclose the fields, methods,
-     * constructors, record components, and member types that it directly declares.
+     * constructors, record components, and member classes and interfaces that it directly declares.
      *
      * A {@linkplain PackageElement#getEnclosedElements package}
      * encloses the top-level classes and interfaces within it, but is
@@ -233,15 +229,14 @@ public interface Element extends javax.lang.model.AnnotatedConstruct {
      * @see ModuleElement#getEnclosedElements
      * @see Elements#getAllMembers
      * @jls 8.8.9 Default Constructor
-     * @jls 8.9 Enum Types
+     * @jls 8.9 Enum Classes
      * @revised 9
-     * @spec JPMS
      */
     List<? extends Element> getEnclosedElements();
 
     /**
-     * Returns {@code true} if the argument represents the same
-     * element as {@code this}, or {@code false} otherwise.
+     * {@return {@code true} if the argument represents the same
+     * element as {@code this}, or {@code false} otherwise}
      *
      * @apiNote The identity of an element involves implicit state
      * not directly accessible from the element's methods, including
@@ -253,8 +248,6 @@ public interface Element extends javax.lang.model.AnnotatedConstruct {
      * different class loaders.
      *
      * @param obj  the object to be compared with this element
-     * @return {@code true} if the specified object represents the same
-     *          element as this
      */
     @Override
     boolean equals(Object obj);

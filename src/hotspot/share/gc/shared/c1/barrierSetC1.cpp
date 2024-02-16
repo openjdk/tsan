@@ -25,6 +25,7 @@
 #include "precompiled.hpp"
 #include "c1/c1_Defs.hpp"
 #include "c1/c1_LIRGenerator.hpp"
+#include "classfile/javaClasses.hpp"
 #include "gc/shared/c1/barrierSetC1.hpp"
 #include "utilities/macros.hpp"
 
@@ -341,8 +342,4 @@ void BarrierSetC1::generate_referent_check(LIRAccess& access, LabelObj* cont) {
       __ branch(lir_cond_equal, cont->label());
     }
   }
-}
-
-LIR_Opr BarrierSetC1::resolve(LIRGenerator* gen, DecoratorSet decorators, LIR_Opr obj) {
-  return obj;
 }

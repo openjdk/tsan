@@ -141,17 +141,6 @@ public:
 };
 static MarkActivationClosure mark_activation_closure;
 
-class SetHotnessClosure: public CodeBlobClosure {
-public:
-  virtual void do_code_blob(CodeBlob* cb) {
-    assert(cb->is_nmethod(), "CodeBlob should be nmethod");
-    nmethod* nm = (nmethod*)cb;
-    nm->set_hotness_counter(NMethodSweeper::hotness_counter_reset_val());
-  }
-};
-static SetHotnessClosure set_hotness_closure;
-
-
 int NMethodSweeper::hotness_counter_reset_val() {
   if (_hotness_counter_reset_val == 0) {
     _hotness_counter_reset_val = (ReservedCodeCacheSize < M) ? 1 : (ReservedCodeCacheSize / M) * 2;
@@ -169,8 +158,7 @@ public:
   NMethodMarkingClosure(CodeBlobClosure* cl) : HandshakeClosure("NMethodMarking"), _cl(cl) {}
   void do_thread(Thread* thread) {
     if (thread->is_Java_thread() && ! thread->is_Code_cache_sweeper_thread()) {
-      JavaThread* jt = (JavaThread*) thread;
-      jt->nmethods_do(_cl);
+      thread->as_Java_thread()->nmethods_do(_cl);
     }
   }
 };
@@ -202,29 +190,6 @@ CodeBlobClosure* NMethodSweeper::prepare_mark_active_nmethods() {
     tty->print_cr("### Sweep: stack traversal %ld", _traversals);
   }
   return &mark_activation_closure;
-}
-
-CodeBlobClosure* NMethodSweeper::prepare_reset_hotness_counters() {
-  assert(SafepointSynchronize::is_at_safepoint(), "must be executed at a safepoint");
-
-  // If we do not want to reclaim not-entrant or zombie methods there is no need
-  // to scan stacks
-  if (!MethodFlushing) {
-    return NULL;
-  }
-
-  // Check for restart
-  if (_current.method() != NULL) {
-    if (_current.method()->is_nmethod()) {
-      assert(CodeCache::find_blob_unsafe(_current.method()) == _current.method(), "Sweeper nmethod cached state invalid");
-    } else if (_current.method()->is_aot()) {
-      assert(CodeCache::find_blob_unsafe(_current.method()->code_begin()) == _current.method(), "Sweeper AOT method cached state invalid");
-    } else {
-      ShouldNotReachHere();
-    }
-  }
-
-  return &set_hotness_closure;
 }
 
 /**
@@ -301,14 +266,13 @@ void NMethodSweeper::force_sweep() {
  */
 void NMethodSweeper::handle_safepoint_request() {
   JavaThread* thread = JavaThread::current();
-  if (SafepointMechanism::should_block(thread)) {
+  if (SafepointMechanism::should_process(thread)) {
     if (PrintMethodFlushing && Verbose) {
       tty->print_cr("### Sweep at %d out of %d, yielding to safepoint", _seen, CodeCache::nmethod_count());
     }
     MutexUnlocker mu(CodeCache_lock, Mutex::_no_safepoint_check_flag);
 
     ThreadBlockInVM tbivm(thread);
-    thread->java_suspend_self();
   }
 }
 

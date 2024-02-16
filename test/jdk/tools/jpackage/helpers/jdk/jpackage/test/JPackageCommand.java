@@ -1,12 +1,10 @@
 /*
- * Copyright (c) 2019, 2020, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2019, 2021, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
- * published by the Free Software Foundation.  Oracle designates this
- * particular file as subject to the "Classpath" exception as provided
- * by Oracle in the LICENSE file that accompanied this code.
+ * published by the Free Software Foundation.
  *
  * This code is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
@@ -30,16 +28,25 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.SecureRandom;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.HashMap;
+import java.util.List;
+import java.util.ListIterator;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Optional;
+import java.util.Set;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
+import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
-import jdk.incubator.jpackage.internal.AppImageFile;
-import jdk.incubator.jpackage.internal.ApplicationLayout;
+import jdk.jpackage.internal.AppImageFile;
+import jdk.jpackage.internal.ApplicationLayout;
 import jdk.jpackage.test.Functional.ThrowingConsumer;
 import jdk.jpackage.test.Functional.ThrowingFunction;
 import jdk.jpackage.test.Functional.ThrowingSupplier;
@@ -200,7 +207,26 @@ public final class JPackageCommand extends CommandArguments<JPackageCommand> {
     }
 
     public String name() {
+        String appImage = getArgumentValue("--app-image", () -> null);
+        if (appImage != null) {
+            String name =  AppImageFile.extractAppName(Path.of(appImage));
+            // can be null if using foreign app-image
+            return ((name != null) ? name : getArgumentValue("--name"));
+        }
         return getArgumentValue("--name", () -> getArgumentValue("--main-class"));
+    }
+
+    public String installerName() {
+        verifyIsOfType(PackageType.NATIVE);
+        String installerName = getArgumentValue("--name",
+                () -> getArgumentValue("--main-class", () -> null));
+        if (installerName == null) {
+            String appImage = getArgumentValue("--app-image");
+            if (appImage != null) {
+                installerName = AppImageFile.extractAppName(Path.of(appImage));
+            }
+        }
+        return installerName;
     }
 
     public boolean isRuntime() {
@@ -615,6 +641,9 @@ public final class JPackageCommand extends CommandArguments<JPackageCommand> {
             exec.setToolProvider(JavaTool.JPACKAGE);
         } else {
             exec.setExecutable(JavaTool.JPACKAGE);
+            if (TKit.isWindows()) {
+                exec.setWindowsTmpDir(System.getProperty("java.io.tmpdir"));
+            }
         }
 
         return exec;
@@ -695,7 +724,7 @@ public final class JPackageCommand extends CommandArguments<JPackageCommand> {
                         .filter(path -> path.getFileName().equals(appImageFileName))
                         .map(Path::toString)
                         .collect(Collectors.toList());
-                if (isImagePackageType() || TKit.isOSX()) {
+                if (isImagePackageType() || (TKit.isOSX() && !isRuntime())) {
                     List<String> expected = List.of(
                             AppImageFile.getPathInAppImage(rootDir).toString());
                     TKit.assertStringListEquals(expected, appImageFiles,
@@ -722,11 +751,11 @@ public final class JPackageCommand extends CommandArguments<JPackageCommand> {
         if (!isRuntime()) {
             TKit.assertExecutableFileExists(appLauncherPath());
             TKit.assertFileExists(appLauncherCfgPath(null));
-        }
 
-        if (TKit.isOSX()) {
-            TKit.assertFileExists(appRuntimeDirectory().resolve(
-                    "Contents/MacOS/libjli.dylib"));
+            if (TKit.isOSX()) {
+                TKit.assertFileExists(appRuntimeDirectory().resolve(
+                        "Contents/MacOS/libjli.dylib"));
+            }
         }
 
         return this;
@@ -783,11 +812,11 @@ public final class JPackageCommand extends CommandArguments<JPackageCommand> {
         }
     }
 
-    public CfgFile readLaunherCfgFile() {
-        return readLaunherCfgFile(null);
+    public CfgFile readLauncherCfgFile() {
+        return readLauncherCfgFile(null);
     }
 
-    public CfgFile readLaunherCfgFile(String launcherName) {
+    public CfgFile readLauncherCfgFile(String launcherName) {
         verifyIsOfType(PackageType.IMAGE);
         if (isRuntime()) {
             return null;
@@ -827,13 +856,17 @@ public final class JPackageCommand extends CommandArguments<JPackageCommand> {
         }).collect(Collectors.joining(" "));
     }
 
-    public static Stream<String> filterOutput(Stream<String> jpackageOutput) {
-        // Skip "WARNING: Using incubator ..." first line of output
-        return jpackageOutput.skip(1);
-    }
-
-    public static List<String> filterOutput(List<String> jpackageOutput) {
-        return filterOutput(jpackageOutput.stream()).collect(Collectors.toList());
+    public static Stream<String> stripTimestamps(Stream<String> stream) {
+        // [HH:mm:ss.SSS]
+        final Pattern timestampRegexp = Pattern.compile(
+                "^\\[\\d\\d:\\d\\d:\\d\\d.\\d\\d\\d\\] ");
+        return stream.map(str -> {
+            Matcher m = timestampRegexp.matcher(str);
+            if (m.find()) {
+                str = str.substring(m.end());
+            }
+            return str;
+        });
     }
 
     @Override

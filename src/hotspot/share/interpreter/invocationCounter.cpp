@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1997, 2019, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 1997, 2021, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -23,6 +23,7 @@
  */
 
 #include "precompiled.hpp"
+#include "compiler/compiler_globals.hpp"
 #include "interpreter/invocationCounter.hpp"
 
 void InvocationCounter::init() {
@@ -48,18 +49,6 @@ void InvocationCounter::update(uint new_count) {
   set(new_count, f);
 }
 
-void InvocationCounter::set_carry_and_reduce() {
-  uint counter = raw_counter();
-  // The carry bit now indicates that this counter had achieved a very
-  // large value.  Now reduce the value, so that the method can be
-  // executed many more times before re-entering the VM.
-  uint old_count = extract_count(counter);
-  uint new_count = MIN2(old_count, (uint)(CompileThreshold / 2));
-  // prevent from going to zero, to distinguish from never-executed methods
-  if (new_count == 0)  new_count = 1;
-  if (old_count != new_count)  set(new_count, carry_mask);
-}
-
 void InvocationCounter::set_carry_on_overflow() {
   if (!carry() && count() > InvocationCounter::count_limit / 2) {
     set_carry();
@@ -79,33 +68,4 @@ void InvocationCounter::print() {
   tty->print_cr("invocation count: up = %d, limit = %d, carry = %s",
                                    extract_count(counter), limit(),
                                    extract_carry(counter) ? "true" : "false");
-}
-
-#ifdef CC_INTERP
-int                       InvocationCounter::InterpreterInvocationLimit;
-int                       InvocationCounter::InterpreterBackwardBranchLimit;
-#endif
-
-void invocationCounter_init() {
-#ifdef CC_INTERP
-  InvocationCounter::InterpreterInvocationLimit =
-    CompileThreshold << InvocationCounter::count_shift;
-
-  // When methodData is collected, the backward branch limit is compared against a
-  // methodData counter, rather than an InvocationCounter.  In the former case, we
-  // don't need the shift by number_of_noncount_bits, but we do need to adjust
-  // the factor by which we scale the threshold.
-  if (ProfileInterpreter) {
-    InvocationCounter::InterpreterBackwardBranchLimit =
-      (int)((int64_t)CompileThreshold
-            * (OnStackReplacePercentage - InterpreterProfilePercentage) / 100);
-  } else {
-    InvocationCounter::InterpreterBackwardBranchLimit =
-      (int)(((int64_t)CompileThreshold * OnStackReplacePercentage / 100)
-            << InvocationCounter::count_shift);
-  }
-
-  assert(0 <= InvocationCounter::InterpreterBackwardBranchLimit,
-         "OSR threshold should be non-negative");
-#endif
 }
