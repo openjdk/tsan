@@ -2090,6 +2090,7 @@ const intx ObjectAlignmentInBytes = 8;
   TSAN_ONLY(product(ccstr, ThreadSanitizerIgnoreFile, NULL,                 \
           "File containing a list of ignored field patterns for "           \
           "ThreadSanitizer."))                                              \
+                                                                            \
   develop(bool, VerifyCrossModifyFence,                                     \
           false AARCH64_ONLY(DEBUG_ONLY(||true)),                           \
              "Mark all threads after a safepoint, and clear on a modify "   \

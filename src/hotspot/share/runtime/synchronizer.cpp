@@ -662,7 +662,7 @@ int ObjectSynchronizer::wait(Handle obj, jlong millis, TRAPS) {
   // after ownership is regained.
   ObjectMonitor* monitor = inflate(current, obj(), inflate_cause_wait);
 
-  DTRACE_MONITOR_WAIT_PROBE(monitor, obj(), THREAD, millis);
+  DTRACE_MONITOR_WAIT_PROBE(monitor, obj(), current, millis);
 
   TSAN_ONLY(int tsan_rec = 0;)
   TSAN_RUNTIME_ONLY(

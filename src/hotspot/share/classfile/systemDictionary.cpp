@@ -475,7 +475,7 @@ static void double_lock_wait(JavaThread* thread, Handle lockObject) {
   assert(lockObject() != NULL, "lockObject must be non-NULL");
   bool calledholdinglock
       = ObjectSynchronizer::current_thread_holds_lock(thread, lockObject);
-  assert(calledholdinglock,"must hold lock for notify");
+  assert(calledholdinglock, "must hold lock for notify");
   assert(!is_parallelCapable(lockObject), "lockObject must not be parallelCapable");
   // These don't throw exceptions.
   ObjectSynchronizer::notifyall(lockObject, thread);

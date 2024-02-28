@@ -35,8 +35,6 @@
 #include "memory/resourceArea.hpp"
 #include "runtime/stackWatermarkSet.inline.hpp"
 #include "runtime/thread.hpp"
-#include "services/management.hpp"
-#include "tsan/tsanOopMap.hpp"
 
 ShenandoahJavaThreadsIterator::ShenandoahJavaThreadsIterator(ShenandoahPhaseTimings::Phase phase, uint n_workers) :
   _threads(),
