@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1997, 2020, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 1997, 2021, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -27,7 +27,6 @@
 
 #include "asm/assembler.hpp"
 #include "runtime/icache.hpp"
-#include "runtime/os.hpp"
 #include "runtime/safepointMechanism.hpp"
 
 // We have interfaces for the following instructions:
@@ -93,9 +92,6 @@ class NativeInstruction {
   void wrote(int offset);
 
  public:
-
-  // unit test stuff
-  static void test() {}                 // override for testing
 
   inline friend NativeInstruction* nativeInstruction_at(address address);
 };
@@ -202,13 +198,6 @@ class NativeCall: public NativeInstruction {
       nativeCall_at(instr)->destination() == target;
   }
 
-#if INCLUDE_AOT
-  static bool is_far_call(address instr, address target) {
-    intptr_t disp = target - (instr + sizeof(int32_t));
-    return !Assembler::is_simm32(disp);
-  }
-#endif
-
   // MT-safe patching of a call instruction.
   static void insert(address code_pos, address entry);
 
@@ -276,9 +265,6 @@ class NativeMovConstReg: public NativeInstruction {
 
   void  verify();
   void  print();
-
-  // unit test stuff
-  static void test() {}
 
   // Creation
   inline friend NativeMovConstReg* nativeMovConstReg_at(address address);
@@ -393,9 +379,6 @@ class NativeMovRegMem: public NativeInstruction {
   void verify();
   void print ();
 
-  // unit test stuff
-  static void test() {}
-
  private:
   int patch_offset() const;
   inline friend NativeMovRegMem* nativeMovRegMem_at (address address);
@@ -431,9 +414,6 @@ class NativeLoadAddress: public NativeMovRegMem {
 
   void verify();
   void print ();
-
-  // unit test stuff
-  static void test() {}
 
  private:
   friend NativeLoadAddress* nativeLoadAddress_at (address address) {
@@ -536,9 +516,6 @@ class NativeJump: public NativeInstruction {
 
   void verify();
 
-  // Unit testing stuff
-  static void test() {}
-
   // Insertion of native jump instruction
   static void insert(address code_pos, address entry);
   // MT-safe insertion of native jump at verified method entry
@@ -563,9 +540,6 @@ class NativeFarJump: public NativeInstruction {
   inline friend NativeFarJump* nativeFarJump_at(address address);
 
   void verify();
-
-  // Unit testing stuff
-  static void test() {}
 
 };
 

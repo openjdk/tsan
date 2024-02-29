@@ -24,12 +24,10 @@
 import java.nio.file.Path;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.function.Supplier;
 import jdk.jpackage.test.TKit;
 import jdk.jpackage.test.PackageTest;
 import jdk.jpackage.test.PackageType;
 import jdk.jpackage.test.Functional;
-import jdk.jpackage.test.JPackageCommand;
 import jdk.jpackage.test.Annotations.Parameter;
 
 /**
@@ -60,7 +58,7 @@ import jdk.jpackage.test.Annotations.Parameter;
  * @key jpackagePlatformPackage
  * @build jdk.jpackage.test.*
  * @compile InstallDirTest.java
- * @modules jdk.incubator.jpackage/jdk.incubator.jpackage.internal
+ * @modules jdk.jpackage/jdk.jpackage.internal
  * @run main/othervm/timeout=540 -Xmx512m jdk.jpackage.test.Main
  *  --jpt-run=InstallDirTest.testCommon
  */
@@ -72,7 +70,7 @@ import jdk.jpackage.test.Annotations.Parameter;
  * @key jpackagePlatformPackage
  * @build jdk.jpackage.test.*
  * @compile InstallDirTest.java
- * @modules jdk.incubator.jpackage/jdk.incubator.jpackage.internal
+ * @modules jdk.jpackage/jdk.jpackage.internal
  * @requires (os.family == "linux")
  * @requires (jpackage.test.SQETest == null)
  * @run main/othervm/timeout=360 -Xmx512m jdk.jpackage.test.Main

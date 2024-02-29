@@ -1,6 +1,6 @@
 /*
- * Copyright (c) 1997, 2020, Oracle and/or its affiliates. All rights reserved.
- * Copyright (c) 2014, Red Hat Inc. All rights reserved.
+ * Copyright (c) 1997, 2021, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2014, 2020, Red Hat Inc. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -24,6 +24,7 @@
  */
 
 #include "precompiled.hpp"
+#include "compiler/oopMap.hpp"
 #include "interpreter/interpreter.hpp"
 #include "memory/resourceArea.hpp"
 #include "memory/universe.hpp"
@@ -37,6 +38,7 @@
 #include "runtime/monitorChunk.hpp"
 #include "runtime/os.inline.hpp"
 #include "runtime/signature.hpp"
+#include "runtime/stackWatermarkSet.hpp"
 #include "runtime/stubCodeGenerator.hpp"
 #include "runtime/stubRoutines.hpp"
 #include "vmreg_aarch64.inline.hpp"
@@ -270,6 +272,9 @@ void frame::patch_pc(Thread* thread, address pc) {
     tty->print_cr("patch_pc at address " INTPTR_FORMAT " [" INTPTR_FORMAT " -> " INTPTR_FORMAT "]",
                   p2i(pc_addr), p2i(*pc_addr), p2i(pc));
   }
+
+  // Only generated code frames should be patched, therefore the return address will not be signed.
+  assert(pauth_ptr_is_raw(*pc_addr), "cannot be signed");
   // Either the return address is the original one or we are going to
   // patch in the same address that's already there.
   assert(_pc == *pc_addr || pc == *pc_addr, "must be");
@@ -353,7 +358,23 @@ frame frame::sender_for_entry_frame(RegisterMap* map) const {
   assert(map->include_argument_oops(), "should be set by clear");
   vmassert(jfa->last_Java_pc() != NULL, "not walkable");
   frame fr(jfa->last_Java_sp(), jfa->last_Java_fp(), jfa->last_Java_pc());
+
   return fr;
+}
+
+OptimizedEntryBlob::FrameData* OptimizedEntryBlob::frame_data_for_frame(const frame& frame) const {
+  ShouldNotCallThis();
+  return nullptr;
+}
+
+bool frame::optimized_entry_frame_is_first() const {
+  ShouldNotCallThis();
+  return false;
+}
+
+frame frame::sender_for_optimized_entry_frame(RegisterMap* map) const {
+  ShouldNotCallThis();
+  return {};
 }
 
 //------------------------------------------------------------------------------
@@ -433,7 +454,9 @@ frame frame::sender_for_interpreter_frame(RegisterMap* map) const {
   }
 #endif // COMPILER2_OR_JVMCI
 
-  return frame(sender_sp, unextended_sp, link(), sender_pc());
+  // Use the raw version of pc - the interpreter should not have signed it.
+
+  return frame(sender_sp, unextended_sp, link(), sender_pc_maybe_signed());
 }
 
 
@@ -476,8 +499,8 @@ frame frame::sender_for_compiled_frame(RegisterMap* map) const {
 }
 
 //------------------------------------------------------------------------------
-// frame::sender
-frame frame::sender(RegisterMap* map) const {
+// frame::sender_raw
+frame frame::sender_raw(RegisterMap* map) const {
   // Default is we done have to follow them. The sender_for_xxx will
   // update it accordingly
    map->set_include_argument_oops(false);
@@ -496,7 +519,18 @@ frame frame::sender(RegisterMap* map) const {
 
   // Must be native-compiled frame, i.e. the marshaling code for native
   // methods that exists in the core system.
+
   return frame(sender_sp(), link(), sender_pc());
+}
+
+frame frame::sender(RegisterMap* map) const {
+  frame result = sender_raw(map);
+
+  if (map->process_frames()) {
+    StackWatermarkSet::on_iteration(map->thread(), result);
+  }
+
+  return result;
 }
 
 bool frame::is_interpreted_frame_valid(JavaThread* thread) const {
@@ -583,7 +617,7 @@ BasicType frame::interpreter_frame_result(oop* oop_result, jvalue* value_result)
         oop* obj_p = (oop*)tos_addr;
         obj = (obj_p == NULL) ? (oop)NULL : *obj_p;
       }
-      assert(obj == NULL || Universe::heap()->is_in(obj), "sanity check");
+      assert(Universe::is_in_heap_or_null(obj), "sanity check");
       *oop_result = obj;
       break;
     }
@@ -651,17 +685,18 @@ intptr_t* frame::real_fp() const {
 
 #undef DESCRIBE_FP_OFFSET
 
-#define DESCRIBE_FP_OFFSET(name)                                        \
-  {                                                                     \
-    unsigned long *p = (unsigned long *)fp;                             \
-    printf("0x%016lx 0x%016lx %s\n", (unsigned long)(p + frame::name##_offset), \
-           p[frame::name##_offset], #name);                             \
+#define DESCRIBE_FP_OFFSET(name)                     \
+  {                                                  \
+    uintptr_t *p = (uintptr_t *)fp;                  \
+    printf(INTPTR_FORMAT " " INTPTR_FORMAT " %s\n",  \
+           (uintptr_t)(p + frame::name##_offset),    \
+           p[frame::name##_offset], #name);          \
   }
 
-static __thread unsigned long nextfp;
-static __thread unsigned long nextpc;
-static __thread unsigned long nextsp;
-static __thread RegisterMap *reg_map;
+static THREAD_LOCAL uintptr_t nextfp;
+static THREAD_LOCAL uintptr_t nextpc;
+static THREAD_LOCAL uintptr_t nextsp;
+static THREAD_LOCAL RegisterMap *reg_map;
 
 static void printbc(Method *m, intptr_t bcx) {
   const char *name;
@@ -679,7 +714,7 @@ static void printbc(Method *m, intptr_t bcx) {
   printf("%s : %s ==> %s\n", m->name_and_sig_as_C_string(), buf, name);
 }
 
-void internal_pf(unsigned long sp, unsigned long fp, unsigned long pc, unsigned long bcx) {
+void internal_pf(uintptr_t sp, uintptr_t fp, uintptr_t pc, uintptr_t bcx) {
   if (! fp)
     return;
 
@@ -693,7 +728,7 @@ void internal_pf(unsigned long sp, unsigned long fp, unsigned long pc, unsigned 
   DESCRIBE_FP_OFFSET(interpreter_frame_locals);
   DESCRIBE_FP_OFFSET(interpreter_frame_bcp);
   DESCRIBE_FP_OFFSET(interpreter_frame_initial_sp);
-  unsigned long *p = (unsigned long *)fp;
+  uintptr_t *p = (uintptr_t *)fp;
 
   // We want to see all frames, native and Java.  For compiled and
   // interpreted frames we have special information that allows us to
@@ -703,16 +738,16 @@ void internal_pf(unsigned long sp, unsigned long fp, unsigned long pc, unsigned 
   if (this_frame.is_compiled_frame() ||
       this_frame.is_interpreted_frame()) {
     frame sender = this_frame.sender(reg_map);
-    nextfp = (unsigned long)sender.fp();
-    nextpc = (unsigned long)sender.pc();
-    nextsp = (unsigned long)sender.unextended_sp();
+    nextfp = (uintptr_t)sender.fp();
+    nextpc = (uintptr_t)sender.pc();
+    nextsp = (uintptr_t)sender.unextended_sp();
   } else {
     nextfp = p[frame::link_offset];
     nextpc = p[frame::return_addr_offset];
-    nextsp = (unsigned long)&p[frame::sender_sp_offset];
+    nextsp = (uintptr_t)&p[frame::sender_sp_offset];
   }
 
-  if (bcx == -1ul)
+  if (bcx == -1ULL)
     bcx = p[frame::interpreter_frame_bcp_offset];
 
   if (Interpreter::contains((address)pc)) {
@@ -746,10 +781,10 @@ extern "C" void npf() {
   internal_pf (nextsp, nextfp, nextpc, -1);
 }
 
-extern "C" void pf(unsigned long sp, unsigned long fp, unsigned long pc,
-                   unsigned long bcx, unsigned long thread) {
+extern "C" void pf(uintptr_t sp, uintptr_t fp, uintptr_t pc,
+                   uintptr_t bcx, uintptr_t thread) {
   if (!reg_map) {
-    reg_map = NEW_C_HEAP_OBJ(RegisterMap, mtNone);
+    reg_map = NEW_C_HEAP_OBJ(RegisterMap, mtInternal);
     ::new (reg_map) RegisterMap((JavaThread*)thread, false);
   } else {
     *reg_map = RegisterMap((JavaThread*)thread, false);
@@ -766,9 +801,9 @@ extern "C" void pf(unsigned long sp, unsigned long fp, unsigned long pc,
 // support for printing out where we are in a Java method
 // needs to be passed current fp and bcp register values
 // prints method name, bc index and bytecode name
-extern "C" void pm(unsigned long fp, unsigned long bcx) {
+extern "C" void pm(uintptr_t fp, uintptr_t bcx) {
   DESCRIBE_FP_OFFSET(interpreter_frame_method);
-  unsigned long *p = (unsigned long *)fp;
+  uintptr_t *p = (uintptr_t *)fp;
   Method* m = (Method*)p[frame::interpreter_frame_method_offset];
   printbc(m, bcx);
 }

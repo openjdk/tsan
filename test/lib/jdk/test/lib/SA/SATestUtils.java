@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019, 2020, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2019, 2021, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -26,7 +26,6 @@ import jdk.test.lib.JDKToolLauncher;
 import jdk.test.lib.Platform;
 import jtreg.SkippedException;
 
-import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Paths;
@@ -35,9 +34,8 @@ import java.security.PrivilegedActionException;
 import java.security.PrivilegedExceptionAction;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.List;
 import java.util.concurrent.TimeUnit;
-import java.util.zip.GZIPInputStream;
+import java.util.List;
 
 public class SATestUtils {
     /**
@@ -210,16 +208,19 @@ public class SATestUtils {
         return true;
     }
 
-    public static void unzipCores(File dir) {
-        File[] gzCores = dir.listFiles((directory, name) -> name.matches("core(\\.\\d+)?\\.gz"));
-        for (File gzCore : gzCores) {
-            String coreFileName = gzCore.getName().replace(".gz", "");
-            System.out.println("Unzipping core into " + coreFileName);
-            try (GZIPInputStream gzis = new GZIPInputStream(Files.newInputStream(gzCore.toPath()))) {
-                Files.copy(gzis, Paths.get(coreFileName));
-            } catch (IOException e) {
-                throw new SkippedException("Not able to unzip file: " + gzCore.getAbsolutePath(), e);
-            }
+    /**
+     * This tests has issues if you try adding privileges on OSX. The debugd process cannot
+     * be killed if you do this (because it is a root process and the test is not), so the destroy()
+     * call fails to do anything, and then waitFor() will time out. If you try to manually kill it with
+     * a "sudo kill" command, that seems to work, but then leaves the LingeredApp it was
+     * attached to in a stuck state for some unknown reason, causing the stopApp() call
+     * to timeout. For that reason we don't run this test when privileges are needed. Note
+     * it does appear to run fine as root, so we still allow it to run on OSX when privileges
+     * are not required.
+     */
+    public static void validateSADebugDPrivileges() {
+        if (needsPrivileges()) {
+            throw new SkippedException("Cannot run this test on OSX if adding privileges is required.");
         }
     }
 }

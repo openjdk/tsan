@@ -47,16 +47,34 @@
  *      -XX:+UseShenandoahGC -XX:ShenandoahGCHeuristics=aggressive
  *      -Dprecise=false
  *      TestChurnNotifications
+ */
+
+/*
+ * @test TestChurnNotifications
+ * @summary Check that MX notifications are reported for all cycles
+ * @requires vm.gc.Shenandoah
  *
  * @run main/othervm -Xmx128m -XX:+UnlockDiagnosticVMOptions -XX:+UnlockExperimentalVMOptions
  *      -XX:+UseShenandoahGC -XX:ShenandoahGCHeuristics=adaptive
  *      -Dprecise=false
  *      TestChurnNotifications
+ */
+
+/*
+ * @test TestChurnNotifications
+ * @summary Check that MX notifications are reported for all cycles
+ * @requires vm.gc.Shenandoah
  *
  * @run main/othervm -Xmx128m -XX:+UnlockDiagnosticVMOptions -XX:+UnlockExperimentalVMOptions
  *      -XX:+UseShenandoahGC -XX:ShenandoahGCHeuristics=static
  *      -Dprecise=false
  *      TestChurnNotifications
+ */
+
+/*
+ * @test TestChurnNotifications
+ * @summary Check that MX notifications are reported for all cycles
+ * @requires vm.gc.Shenandoah
  *
  * @run main/othervm -Xmx128m -XX:+UnlockDiagnosticVMOptions -XX:+UnlockExperimentalVMOptions
  *      -XX:+UseShenandoahGC -XX:ShenandoahGCHeuristics=compact
@@ -91,7 +109,7 @@ import com.sun.management.GarbageCollectionNotificationInfo;
 public class TestChurnNotifications {
 
     static final long HEAP_MB = 128;                           // adjust for test configuration above
-    static final long TARGET_MB = Long.getLong("target", 8_000); // 8 Gb allocation
+    static final long TARGET_MB = Long.getLong("target", 2_000); // 2 Gb allocation
 
     // Should we track the churn precisely?
     // Precise tracking is only reliable when GC is fully stop-the-world. Otherwise,
@@ -141,7 +159,12 @@ public class TestChurnNotifications {
 
         System.gc();
 
-        Thread.sleep(1000);
+        // Wait until notifications start arriving, and then wait some more
+        // to catch the ones arriving late.
+        while (churnBytes.get() == 0) {
+            Thread.sleep(1000);
+        }
+        Thread.sleep(5000);
 
         long actual = churnBytes.get();
 
@@ -149,7 +172,7 @@ public class TestChurnNotifications {
         long maxExpected = mem + HEAP_MB * 1024 * 1024;
 
         String msg = "Expected = [" + minExpected / M + "; " + maxExpected / M + "] (" + mem / M + "), actual = " + actual / M;
-        if (minExpected < actual && actual < maxExpected) {
+        if (minExpected <= actual && actual <= maxExpected) {
             System.out.println(msg);
         } else {
             throw new IllegalStateException(msg);

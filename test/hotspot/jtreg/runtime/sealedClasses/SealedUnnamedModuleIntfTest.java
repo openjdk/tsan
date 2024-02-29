@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2020, 2021, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -25,21 +25,25 @@
  * @test
  * @bug 8225056
  * @compile Pkg/SealedInterface.jcod Pkg/NotPermitted.jcod
- * @compile --enable-preview -source ${jdk.version} Pkg/Permitted.java otherPkg/WrongPackage.java
- * @run main/othervm --enable-preview SealedUnnamedModuleIntfTest
+ * @compile Pkg/Permitted.java otherPkg/WrongPackage.java otherPkg/WrongPackageNotPublic.java
+ * @run main SealedUnnamedModuleIntfTest
  */
 
 public class SealedUnnamedModuleIntfTest {
 
     public static void main(String args[]) throws Throwable {
 
-        // Classes Permitted, NotPermitted, and WrongPackage all try to implement
+        // Classes Permitted, NotPermitted, WrongPackage and WrongPackageNotPublic all try to implement
         // sealed interface SealedInterface.
-        // Interface SealedInterface permits classes Permitted and WrongPackage.
+        // Interface SealedInterface permits classes Permitted, WrongPackage, and WrongPackageNotPublic;
 
         // Test non-public permitted subclass and superclass in unnamed module and
         // same package.  This should succeed.
         Class permitted = Class.forName("Pkg.Permitted");
+
+        // Test public permitted subclass and superclass in same unnamed module but in
+        // different packages.  This should not throw an exception.
+        Class wrongPkg = Class.forName("otherPkg.WrongPackage");
 
         // Test unpermitted subclass and superclass in unnamed module and same package.
         // This should throw an exception.
@@ -52,8 +56,15 @@ public class SealedUnnamedModuleIntfTest {
             }
         }
 
-        // Test public permitted subclass and superclass in same unnamed module but in
-        // different packages.  This should not throw an exception.
-        Class wrongPkg = Class.forName("otherPkg.WrongPackage");
+        // Test non-public permitted subclass and superclass in same unnamed module but
+        // in different packages.  This should throw an exception.
+        try {
+            Class notPermitted = Class.forName("otherPkg.WrongPackageNotPublic");
+            throw new RuntimeException("Expected IncompatibleClassChangeError exception not thrown");
+        } catch (IncompatibleClassChangeError e) {
+            if (!e.getMessage().contains("cannot implement sealed interface")) {
+                throw new RuntimeException("Wrong IncompatibleClassChangeError exception thrown: " + e.getMessage());
+            }
+        }
     }
 }
