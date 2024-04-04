@@ -28,22 +28,12 @@
 
 template <>
 size_t WorkerDataArray<size_t>::uninitialized() {
-  return (size_t)-1;
+  return SIZE_MAX;
 }
 
 template <>
 double WorkerDataArray<double>::uninitialized() {
   return -1.0;
-}
-
-template <>
-void WorkerDataArray<double>::WDAPrinter::summary(outputStream* out, double time) {
-  out->print_cr(" %.1lfms", time * MILLIUNITS);
-}
-
-template <>
-void WorkerDataArray<size_t>::WDAPrinter::summary(outputStream* out, size_t value) {
-  out->print_cr(" " SIZE_FORMAT, value);
 }
 
 template <>

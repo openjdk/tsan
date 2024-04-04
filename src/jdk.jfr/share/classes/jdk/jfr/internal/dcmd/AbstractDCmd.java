@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012, 2021, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2012, 2023, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -30,14 +30,16 @@ import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.time.Duration;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 
 import jdk.jfr.FlightRecorder;
 import jdk.jfr.Recording;
 import jdk.jfr.internal.JVM;
+import jdk.jfr.internal.util.Output.LinePrinter;
+import jdk.jfr.internal.util.Output;
 import jdk.jfr.internal.LogLevel;
 import jdk.jfr.internal.LogTag;
 import jdk.jfr.internal.Logger;
@@ -50,9 +52,7 @@ import jdk.jfr.internal.Utils;
  *
  */
 abstract class AbstractDCmd {
-
-    private final StringBuilder currentLine = new StringBuilder(80);
-    private final List<String> lines = new ArrayList<>();
+    private final LinePrinter output = new LinePrinter();
     private String source;
 
     // Called by native
@@ -74,7 +74,6 @@ abstract class AbstractDCmd {
         try {
             boolean log = Logger.shouldLog(LogTag.JFR_DCMD, LogLevel.DEBUG);
             if (log) {
-                System.out.println(arg);
                 Logger.log(LogTag.JFR_DCMD, LogLevel.DEBUG, "Executing " + this.getClass().getSimpleName() + ": " + arg);
             }
             ArgumentParser parser = new ArgumentParser(getArgumentInfos(), arg, delimiter);
@@ -92,16 +91,19 @@ abstract class AbstractDCmd {
             DCmdException e = new DCmdException(iae.getMessage());
             e.addSuppressed(iae);
             throw e;
-        }
+       }
     }
 
+    protected final Output getOutput() {
+        return output;
+    }
 
     protected final FlightRecorder getFlightRecorder() {
         return FlightRecorder.getFlightRecorder();
     }
 
     protected final String[] getResult() {
-        return lines.toArray(new String[lines.size()]);
+        return output.getLines().toArray(new String[0]);
     }
 
     protected void logWarning(String message) {
@@ -169,7 +171,7 @@ abstract class AbstractDCmd {
 
     protected final List<Recording> getRecordings() {
         List<Recording> list = new ArrayList<>(getFlightRecorder().getRecordings());
-        Collections.sort(list, Comparator.comparing(Recording::getId));
+        list.sort(Comparator.comparingLong(Recording::getId));
         return list;
     }
 
@@ -182,21 +184,19 @@ abstract class AbstractDCmd {
     }
 
     protected final void println() {
-        lines.add(currentLine.toString());
-        currentLine.setLength(0);
+        output.println();
     }
 
     protected final void print(String s) {
-        currentLine.append(s);
+        output.print(s);
     }
 
     protected final void print(String s, Object... args) {
-        currentLine.append(String.format(s, args));
+        output.print(s, args);
     }
 
     protected final void println(String s, Object... args) {
-        print(s, args);
-        println();
+        output.println(s, args);
     }
 
     protected final void printBytes(long bytes) {
@@ -216,6 +216,12 @@ abstract class AbstractDCmd {
             printPath(SecuritySupport.getAbsolutePath(path).toPath());
         } catch (IOException ioe) {
             printPath(path.toPath());
+        }
+    }
+
+    protected final void printHelpText() {
+        for (String line : printHelp()) {
+            println(line);
         }
     }
 
@@ -268,5 +274,42 @@ abstract class AbstractDCmd {
         } else {
             return "/directory/recordings";
         }
+    }
+
+    static String expandFilename(String filename) {
+        if (filename == null || filename.indexOf('%') == -1) {
+            return filename;
+        }
+
+        String pid = null;
+        String time = null;
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < filename.length(); i++) {
+            char c = filename.charAt(i);
+            if (c == '%' && i < filename.length() - 1) {
+                char nc = filename.charAt(i + 1);
+                if (nc == '%') { // %% ==> %
+                    sb.append('%');
+                    i++;
+                } else if (nc == 'p') {
+                    if (pid == null) {
+                        pid = JVM.getJVM().getPid();
+                    }
+                    sb.append(pid);
+                    i++;
+                } else if (nc == 't') {
+                    if (time == null) {
+                        time = Utils.formatDateTime(LocalDateTime.now());
+                    }
+                    sb.append(time);
+                    i++;
+                } else {
+                    sb.append('%');
+                }
+            } else {
+                sb.append(c);
+            }
+        }
+        return sb.toString();
     }
 }
