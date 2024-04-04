@@ -715,7 +715,7 @@ void InterpreterRuntime::resolve_get_put(JavaThread* current, Bytecodes::Code by
 
   bool is_tsan_ignore = false;
 #if INCLUDE_TSAN
-  is_tsan_ignore = info.access_flags().is_stable() || info.access_flags().is_tsan_ignore();
+  is_tsan_ignore = info.field_flags().is_stable() || info.field_flags().is_tsan_ignore();
 #endif  // INCLUDE_TSAN
 
   cp_cache_entry->set_field(

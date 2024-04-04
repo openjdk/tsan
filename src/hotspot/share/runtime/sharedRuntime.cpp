@@ -1107,7 +1107,10 @@ JRT_ENTRY(void, SharedRuntime::tsan_interp_method_entry(JavaThread* current))
   DEBUG_ONLY(NoHandleMark nhm;)
   assert(ThreadSanitizer, "Need -XX:+ThreadSanitizer");
 
-  RegisterMap unused_reg_map(current, false);
+  RegisterMap unused_reg_map(current,
+                             RegisterMap::UpdateMap::skip,
+                             RegisterMap::ProcessFrames::include,
+                             RegisterMap::WalkContinuation::skip);
 
   // These asserts should be removed once
   // we support more than just the interpreter for TSAN.

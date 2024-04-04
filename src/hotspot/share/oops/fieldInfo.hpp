@@ -76,6 +76,9 @@ class FieldInfo {
       _ff_generic,      // has a generic signature
       _ff_stable,       // trust as stable b/c declared as @Stable
       _ff_contended,    // is contended, may have contention-group
+#if INCLUDE_TSAN
+      _ff_tsan_ignore,  // TSAN should ignore memory accesses to this field
+#endif  // INCLUDE_TSAN
     };
 
     // Some but not all of the flag bits signal the presence of an
@@ -110,12 +113,18 @@ class FieldInfo {
     bool is_generic() const         { return test_flag(_ff_generic); }
     bool is_stable() const          { return test_flag(_ff_stable); }
     bool is_contended() const       { return test_flag(_ff_contended); }
+#if INCLUDE_TSAN
+    bool is_tsan_ignore() const     { return test_flag(_ff_tsan_ignore); }
+#endif  // INCLUDE_TSAN
 
     void update_initialized(bool z) { update_flag(_ff_initialized, z); }
     void update_injected(bool z)    { update_flag(_ff_injected, z); }
     void update_generic(bool z)     { update_flag(_ff_generic, z); }
     void update_stable(bool z)      { update_flag(_ff_stable, z); }
     void update_contended(bool z)   { update_flag(_ff_contended, z); }
+#if INCLUDE_TSAN
+    void update_tsan_ignore(bool z) { update_flag(_ff_tsan_ignore, z); }
+#endif  // INCLUDE_TSAN
   };
 
  private:
@@ -219,22 +228,6 @@ public:
   CON* consumer() const { return _consumer; }
   void map_field_info(const FieldInfo& fi);
 };
-
-// FIXME: Still needed?
-#if 0
-#if INCLUDE_TSAN
-  bool is_tsan_ignore() const {
-    //return (access_flags() & JVM_ACC_FIELD_TSAN_IGNORE) != 0;
-    return false;
-  }
-  void set_tsan_ignore(bool z) {
-/*
-    if (z) _shorts[access_flags_offset] |=  JVM_ACC_FIELD_TSAN_IGNORE;
-    else   _shorts[access_flags_offset] &= ~JVM_ACC_FIELD_TSAN_IGNORE;
-*/
-  }
-#endif  // INCLUDE_TSAN
-#endif
 
 // Gadget for decoding and reading the stream of field records.
 class FieldInfoReader {

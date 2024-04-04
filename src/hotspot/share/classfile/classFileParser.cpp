@@ -1994,7 +1994,7 @@ void ClassFileParser::FieldAnnotationCollector::apply_to(FieldInfo* f) {
     (f->field_flags_addr())->update_stable(true);
   TSAN_RUNTIME_ONLY(
     if (is_tsan_ignore())
-      f->set_tsan_ignore(true);
+      (f->field_flags_addr())->update_tsan_ignore(true);
   );
 
 }

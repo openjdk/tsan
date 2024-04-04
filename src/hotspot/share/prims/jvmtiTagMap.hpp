@@ -57,8 +57,6 @@ class JvmtiTagMap :  public CHeapObj<mtServiceability> {
 
  public:
 
-  inline Mutex* lock()                      { return &_lock; }
-
   // indicates if this tag map is locked
   bool is_locked()                          { return lock()->is_locked(); }
   inline Monitor* lock()                    { return &_lock; }

@@ -303,7 +303,7 @@ void mutex_init() {
 #endif
 
   TSAN_RUNTIME_ONLY(
-    def(TsanOopMap_lock            , PaddedMutex  , special,     true,  _safepoint_check_never);
+    MUTEX_DEFN(TsanOopMap_lock               , PaddedMutex  , nosafepoint);
   );
 
 #ifndef SUPPORTS_NATIVE_CX8
