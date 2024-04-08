@@ -29,7 +29,6 @@
 
 #include "java_lang_ref_Finalizer.h"
 
-<<<<<<< HEAD
 void __tsan_java_finalize() __attribute__((weak));
 
 JNIEXPORT void JNICALL

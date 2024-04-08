@@ -74,11 +74,7 @@ static char* altstack = NULL;
 void set_signal_handler() {
   if (altstack == NULL) {
     // Dynamically allocated in case SIGSTKSZ is not constant
-<<<<<<< HEAD
-    altstack = malloc(SIGSTKSZ);
-=======
     altstack = (char*)malloc(SIGSTKSZ);
->>>>>>> jdk-21-ga
     if (altstack == NULL) {
       fprintf(stderr, "Test ERROR. Unable to malloc altstack space\n");
       exit(7);
