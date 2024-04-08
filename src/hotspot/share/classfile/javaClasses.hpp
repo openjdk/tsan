@@ -292,8 +292,6 @@ class java_lang_Class : AllStatic {
   static oop  protection_domain(oop java_class);
   // FIXME: Is this still needed?
 #if INCLUDE_TSAN
-  static oop* init_lock_addr(oop java_class);
-  //static const int* init_lock_offset_addr() { return &_init_lock_offset; }
 #endif  // INCLUDE_TSAN
   static oop  component_mirror(oop java_class);
   static objArrayOop  signers(oop java_class);

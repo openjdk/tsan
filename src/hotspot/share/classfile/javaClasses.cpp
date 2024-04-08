@@ -1196,14 +1196,6 @@ oop java_lang_Class::component_mirror(oop java_class) {
   return java_class->obj_field(_component_mirror_offset);
 }
 
-// FIXME: Is this still needed?
-#if INCLUDE_TSAN
-oop* java_lang_Class::init_lock_addr(oop java_class) {
-  assert(_init_lock_offset != 0, "must be set");
-  return (oop*)java_class->field_addr(_init_lock_offset);
-}
-#endif  // INCLUDE_TSAN
-
 objArrayOop java_lang_Class::signers(oop java_class) {
   assert(_signers_offset != 0, "must be set");
   return (objArrayOop)java_class->obj_field(_signers_offset);

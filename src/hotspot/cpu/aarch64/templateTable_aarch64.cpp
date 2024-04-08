@@ -2418,17 +2418,8 @@ void TemplateTable::load_field_cp_cache_entry(Register obj,
     TSAN_RUNTIME_ONLY(
       // Draw a happens-before edge from the class's static initializer to
       // this lookup.
-
-      // java_lang_Class::_init_lock_offset may not have been initialized
-      // when generating code. It will be initialized at runtime though.
-      // So calculate its address and read from it at runtime.
       __ pusha();
       __ mov(c_rarg0, obj);
-      Address init_lock_offset_address((address) java_lang_Class::init_lock_offset_addr(),
-                                       relocInfo::none);
-      __ lea(rscratch1, init_lock_offset_address);
-      __ ldrw(rscratch1, Address(rscratch1, 0));
-      __ add(c_rarg0, c_rarg0, rscratch1);
       __ call_VM_leaf(CAST_FROM_FN_PTR(address,
                                        SharedRuntime::tsan_acquire),
                                        c_rarg0);
