@@ -3500,7 +3500,7 @@ JVM_END
 
 JNIEXPORT void* JNICALL JVM_RawMonitorCreate(void) {
   VM_Exit::block_if_vm_exited();
-  void *mon = new PlatformMutex(); 
+  void *mon = new PlatformMutex();
   TSAN_RUNTIME_ONLY(TSAN_RAW_LOCK_CREATE(mon));
   return mon;
 }
