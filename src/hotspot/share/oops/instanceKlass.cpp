@@ -755,7 +755,7 @@ void InstanceKlass::initialize(TRAPS) {
       // Construct a happens-before edge between the write of _init_state to
       // fully_initialized and here. Memory accesses from JNI native code
       // invoked from class static initializer may rely on this happens-before
-      // edge to avoid reporting false positive data races. 
+      // edge to avoid reporting false positive data races.
       SharedRuntime::tsan_acquire((address)java_mirror());
     );
     assert(is_initialized(), "sanity check");
