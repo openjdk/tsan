@@ -229,6 +229,7 @@ public:
   void map_field_info(const FieldInfo& fi);
 };
 
+
 // Gadget for decoding and reading the stream of field records.
 class FieldInfoReader {
   friend class FieldInfoStream;

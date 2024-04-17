@@ -56,7 +56,6 @@ class JvmtiTagMap :  public CHeapObj<mtServiceability> {
   void entry_iterate(JvmtiTagMapKeyClosure* closure);
 
  public:
-
   // indicates if this tag map is locked
   bool is_locked()                          { return lock()->is_locked(); }
   inline Monitor* lock()                    { return &_lock; }

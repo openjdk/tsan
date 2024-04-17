@@ -791,7 +791,7 @@ UNSAFE_ENTRY(jobject, Unsafe_CompareAndExchangeReference(JNIEnv *env, jobject un
 UNSAFE_ENTRY(jint, Unsafe_CompareAndExchangeInt(JNIEnv *env, jobject unsafe, jobject obj, jlong offset, jint e, jint x)) {
   oop p = JNIHandles::resolve(obj);
   volatile jint* addr = (volatile jint*)index_oop_from_field_offset_long(p, offset);
-  ScopedReleaseAcquire releaseAcquire(p, offset);
+  ScopedReleaseAcquire releaseAcquire(addr);
   return Atomic::cmpxchg(addr, e, x);
 } UNSAFE_END
 

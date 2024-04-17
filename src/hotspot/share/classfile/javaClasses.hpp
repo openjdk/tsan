@@ -290,9 +290,6 @@ class java_lang_Class : AllStatic {
 
   // Support for embedded per-class oops
   static oop  protection_domain(oop java_class);
-  // FIXME: Is this still needed?
-#if INCLUDE_TSAN
-#endif  // INCLUDE_TSAN
   static oop  component_mirror(oop java_class);
   static objArrayOop  signers(oop java_class);
   static void set_signers(oop java_class, objArrayOop signers);

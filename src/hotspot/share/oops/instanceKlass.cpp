@@ -753,8 +753,9 @@ void InstanceKlass::initialize(TRAPS) {
   } else {
     TSAN_RUNTIME_ONLY(
       // Construct a happens-before edge between the write of _init_state to
-      // fully_initialized and here. This is to read/write of natives related
-      // to class static initializer.
+      // fully_initialized and here. Memory accesses from JNI native code
+      // invoked from class static initializer may rely on this happens-before
+      // edge to avoid reporting false positive data races. 
       SharedRuntime::tsan_acquire((address)java_mirror());
     );
     assert(is_initialized(), "sanity check");
@@ -1201,13 +1202,13 @@ void InstanceKlass::initialize_impl(TRAPS) {
 void InstanceKlass::set_initialization_state_and_notify(ClassState state, JavaThread* current) {
   MonitorLocker ml(current, _init_monitor);
 
-  if (state == fully_initialized) {
-        TSAN_RUNTIME_ONLY(
-        // Construct a happens-before edge between the write of _init_state to
-        // fully_initialized and the later checking if it's initialized.
-        SharedRuntime::tsan_release((address)java_mirror());
-      );
-  }
+  TSAN_RUNTIME_ONLY(
+    if (state == fully_initialized) {
+      // Construct a happens-before edge between the write of _init_state to
+      // fully_initialized and the later checking if it's initialized.
+      SharedRuntime::tsan_release((address)java_mirror());
+    }
+  );
 
   if (state == linked && UseVtableBasedCHA && Universe::is_fully_initialized()) {
     DeoptimizationScope deopt_scope;
