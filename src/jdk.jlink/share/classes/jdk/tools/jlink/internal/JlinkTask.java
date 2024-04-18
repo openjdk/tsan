@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015, 2020, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2015, 2023, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -27,6 +27,7 @@ package jdk.tools.jlink.internal;
 import java.io.BufferedInputStream;
 import java.io.File;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.PrintWriter;
 import java.io.UncheckedIOException;
 import java.lang.module.Configuration;
@@ -69,6 +70,7 @@ import jdk.tools.jlink.internal.ImagePluginStack.ImageProvider;
 import jdk.tools.jlink.plugin.PluginException;
 import jdk.tools.jlink.builder.DefaultImageBuilder;
 import jdk.tools.jlink.plugin.Plugin;
+import jdk.internal.opt.CommandLine;
 import jdk.internal.module.ModulePath;
 import jdk.internal.module.ModuleResolution;
 
@@ -78,7 +80,7 @@ import jdk.internal.module.ModuleResolution;
  * ## Should use jdk.joptsimple some day.
  */
 public class JlinkTask {
-    static final boolean DEBUG = Boolean.getBoolean("jlink.debug");
+    public static final boolean DEBUG = Boolean.getBoolean("jlink.debug");
 
     // jlink API ignores by default. Remove when signing is implemented.
     static final boolean IGNORE_SIGNING_DEFAULT = true;
@@ -223,6 +225,8 @@ public class JlinkTask {
         boolean suggestProviders = false;
     }
 
+    public static final String OPTIONS_RESOURCE = "jdk/tools/jlink/internal/options";
+
     int run(String[] args) {
         if (log == null) {
             setLog(new PrintWriter(System.out, true),
@@ -230,6 +234,18 @@ public class JlinkTask {
         }
         Path outputPath = null;
         try {
+            Module m = JlinkTask.class.getModule();
+            try (InputStream savedOptions = m.getResourceAsStream(OPTIONS_RESOURCE)) {
+                if (savedOptions != null) {
+                    List<String> prependArgs = new ArrayList<>();
+                    CommandLine.loadCmdFile(savedOptions, prependArgs);
+                    if (!prependArgs.isEmpty()) {
+                        prependArgs.addAll(Arrays.asList(args));
+                        args = prependArgs.toArray(new String[prependArgs.size()]);
+                    }
+                }
+            }
+
             List<String> remaining = optionsHelper.handleOptions(this, args);
             if (remaining.size() > 0 && !options.suggestProviders) {
                 throw taskHelper.newBadArgs("err.orphan.arguments",
@@ -248,12 +264,6 @@ public class JlinkTask {
                 taskHelper.showVersion(options.fullVersion);
                 return EXIT_OK;
             }
-
-            if (taskHelper.getExistingImage() != null) {
-                postProcessOnly(taskHelper.getExistingImage());
-                return EXIT_OK;
-            }
-
 
             if (options.modulePath.isEmpty()) {
                 // no --module-path specified - try to set $JAVA_HOME/jmods if that exists
@@ -355,29 +365,6 @@ public class JlinkTask {
         stack.operate(imageProvider);
     }
 
-    /*
-     * Jlink API entry point.
-     */
-    public static void postProcessImage(ExecutableImage image, List<Plugin> postProcessorPlugins)
-            throws Exception {
-        Objects.requireNonNull(image);
-        Objects.requireNonNull(postProcessorPlugins);
-        PluginsConfiguration config = new PluginsConfiguration(postProcessorPlugins);
-        ImagePluginStack stack = ImagePluginConfiguration.
-                parseConfiguration(config);
-
-        stack.operate((ImagePluginStack stack1) -> image);
-    }
-
-    private void postProcessOnly(Path existingImage) throws Exception {
-        PluginsConfiguration config = taskHelper.getPluginsConfig(null, null);
-        ExecutableImage img = DefaultImageBuilder.getExecutableImage(existingImage);
-        if (img == null) {
-            throw taskHelper.newBadArgs("err.existing.image.invalid");
-        }
-        postProcessImage(img, config.getPlugins());
-    }
-
     // the token for "all modules on the module path"
     private static final String ALL_MODULE_PATH = "ALL-MODULE-PATH";
     private JlinkConfiguration initJlinkConfig() throws BadArgs {
@@ -397,7 +384,7 @@ public class JlinkTask {
         }
 
         ModuleFinder finder = newModuleFinder(options.modulePath, options.limitMods, roots);
-        if (!finder.find("java.base").isPresent()) {
+        if (finder.find("java.base").isEmpty()) {
             Path defModPath = getDefaultModulePath();
             if (defModPath != null) {
                 options.modulePath.add(defModPath);
@@ -517,7 +504,7 @@ public class JlinkTask {
 
     private static Path toPathLocation(ResolvedModule m) {
         Optional<URI> ouri = m.reference().location();
-        if (!ouri.isPresent())
+        if (ouri.isEmpty())
             throw new InternalError(m + " does not have a location");
         URI uri = ouri.get();
         return Paths.get(uri);
@@ -821,23 +808,25 @@ public class JlinkTask {
             } else if (path.toString().endsWith(".jar")) {
                 ModularJarArchive modularJarArchive = new ModularJarArchive(module, path, version);
 
-                Stream<Archive.Entry> signatures = modularJarArchive.entries().filter((entry) -> {
-                    String name = entry.name().toUpperCase(Locale.ENGLISH);
+                try (Stream<Archive.Entry> entries = modularJarArchive.entries()) {
+                    boolean hasSignatures = entries.anyMatch((entry) -> {
+                        String name = entry.name().toUpperCase(Locale.ENGLISH);
 
-                    return name.startsWith("META-INF/") && name.indexOf('/', 9) == -1 && (
+                        return name.startsWith("META-INF/") && name.indexOf('/', 9) == -1 && (
                                 name.endsWith(".SF") ||
                                 name.endsWith(".DSA") ||
                                 name.endsWith(".RSA") ||
                                 name.endsWith(".EC") ||
                                 name.startsWith("META-INF/SIG-")
-                            );
-                });
+                        );
+                    });
 
-                if (signatures.count() != 0) {
-                    if (ignoreSigning) {
-                        System.err.println(taskHelper.getMessage("warn.signing", path));
-                    } else {
-                        throw new IllegalArgumentException(taskHelper.getMessage("err.signing", path));
+                    if (hasSignatures) {
+                        if (ignoreSigning) {
+                            System.err.println(taskHelper.getMessage("warn.signing", path));
+                        } else {
+                            throw new IllegalArgumentException(taskHelper.getMessage("err.signing", path));
+                        }
                     }
                 }
 

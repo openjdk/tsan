@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2000, 2021, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2000, 2023, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -25,9 +25,11 @@
 
 package java.nio.charset;
 
+import jdk.internal.misc.ThreadTracker;
 import jdk.internal.misc.VM;
+import jdk.internal.util.StaticProperty;
+import jdk.internal.vm.annotation.Stable;
 import sun.nio.cs.ThreadLocalCoders;
-import sun.security.action.GetPropertyAction;
 
 import java.nio.ByteBuffer;
 import java.nio.CharBuffer;
@@ -36,7 +38,6 @@ import java.security.AccessController;
 import java.security.PrivilegedAction;
 import java.util.Arrays;
 import java.util.Collections;
-import java.util.HashSet;
 import java.util.Iterator;
 import java.util.Locale;
 import java.util.Map;
@@ -210,9 +211,8 @@ import java.util.TreeMap;
  * <small>ZERO-WIDTH NON-BREAKING SPACE</small>.
  *
  * <p> Every instance of the Java virtual machine has a default charset, which
- * may or may not be one of the standard charsets.  The default charset is
- * determined during virtual-machine startup and typically depends upon the
- * locale and charset being used by the underlying operating system. </p>
+ * is {@code UTF-8} unless changed in an implementation specific manner. Refer to
+ * {@link #defaultCharset()} for more detail.
  *
  * <p> The {@link StandardCharsets} class defines constants for each of the
  * standard charsets.
@@ -262,6 +262,13 @@ import java.util.TreeMap;
  * of chars) and sequences of bytes. </p>
  *
  *
+ * @spec http://www.iana.org/assignments/character-sets Character Sets
+ * @spec https://www.rfc-editor.org/info/rfc2278
+ *      RFC 2278: IANA Charset Registration Procedures
+ * @spec https://www.rfc-editor.org/info/rfc2279
+ *      RFC 2279: UTF-8, a transformation format of ISO 10646
+ * @spec https://www.rfc-editor.org/info/rfc2781
+ *      RFC 2781: UTF-16, an encoding of ISO 10646
  * @author Mark Reinhold
  * @author JSR-51 Expert Group
  * @since 1.4
@@ -371,9 +378,17 @@ public abstract class Charset
             };
     }
 
-    // Thread-local gate to prevent recursive provider lookups
-    private static ThreadLocal<ThreadLocal<?>> gate =
-            new ThreadLocal<ThreadLocal<?>>();
+    private static class ThreadTrackHolder {
+        static final ThreadTracker TRACKER = new ThreadTracker();
+    }
+
+    private static Object tryBeginLookup() {
+        return ThreadTrackHolder.TRACKER.tryBegin();
+    }
+
+    private static void endLookup(Object key) {
+        ThreadTrackHolder.TRACKER.end(key);
+    }
 
     @SuppressWarnings("removal")
     private static Charset lookupViaProviders(final String charsetName) {
@@ -389,12 +404,12 @@ public abstract class Charset
         if (!VM.isBooted())
             return null;
 
-        if (gate.get() != null)
+        Object key = tryBeginLookup();
+        if (key == null) {
             // Avoid recursive provider lookups
             return null;
+        }
         try {
-            gate.set(gate);
-
             return AccessController.doPrivileged(
                 new PrivilegedAction<>() {
                     public Charset run() {
@@ -410,7 +425,7 @@ public abstract class Charset
                 });
 
         } finally {
-            gate.set(null);
+            endLookup(key);
         }
     }
 
@@ -528,14 +543,46 @@ public abstract class Charset
         throw new UnsupportedCharsetException(charsetName);
     }
 
+    /**
+     * Returns a charset object for the named charset. If the charset object
+     * for the named charset is not available or {@code charsetName} is not a
+     * legal charset name, then {@code fallback} is returned.
+     *
+     * @param  charsetName
+     *         The name of the requested charset; may be either
+     *         a canonical name or an alias
+     *
+     * @param  fallback
+     *         fallback charset in case the charset object for the named
+     *         charset is not available or {@code charsetName} is not a legal
+     *         charset name. May be {@code null}
+     *
+     * @return  A charset object for the named charset, or {@code fallback}
+     *          in case the charset object for the named charset is not
+     *          available or {@code charsetName} is not a legal charset name
+     *
+     * @throws  IllegalArgumentException
+     *          If the given {@code charsetName} is {@code null}
+     *
+     * @since 18
+     */
+    public static Charset forName(String charsetName,
+                                  Charset fallback) {
+        try {
+            Charset cs = lookup(charsetName);
+            return cs != null ? cs : fallback;
+        } catch (IllegalCharsetNameException icne) {
+            return fallback;
+        }
+    }
+
     // Fold charsets from the given iterator into the given map, ignoring
     // charsets whose names already have entries in the map.
     //
     private static void put(Iterator<Charset> i, Map<String,Charset> m) {
         while (i.hasNext()) {
             Charset cs = i.next();
-            if (!m.containsKey(cs.name()))
-                m.put(cs.name(), cs);
+            m.putIfAbsent(cs.name(), cs);
         }
     }
 
@@ -587,25 +634,31 @@ public abstract class Charset
             });
     }
 
-    private static volatile Charset defaultCharset;
+    private @Stable static Charset defaultCharset;
 
     /**
      * Returns the default charset of this Java virtual machine.
      *
-     * <p> The default charset is determined during virtual-machine startup and
-     * typically depends upon the locale and charset of the underlying
-     * operating system.
+     * <p> The default charset is {@code UTF-8}, unless changed in an
+     * implementation specific manner.
+     *
+     * @implNote An implementation may override the default charset with
+     * the system property {@code file.encoding} on the command line. If the
+     * value is {@code COMPAT}, the default charset is derived from
+     * the {@code native.encoding} system property, which typically depends
+     * upon the locale and charset of the underlying operating system.
      *
      * @return  A charset object for the default charset
+     * @see <a href="../../lang/System.html#file.encoding">file.encoding</a>
+     * @see <a href="../../lang/System.html#native.encoding">native.encoding</a>
      *
      * @since 1.5
      */
     public static Charset defaultCharset() {
         if (defaultCharset == null) {
             synchronized (Charset.class) {
-                String csn = GetPropertyAction
-                        .privilegedGetProperty("file.encoding");
-                Charset cs = lookup(csn);
+                // do not look for providers other than the standard one
+                Charset cs = standardProvider.charsetForName(StaticProperty.fileEncoding());
                 if (cs != null)
                     defaultCharset = cs;
                 else
@@ -620,7 +673,7 @@ public abstract class Charset
 
     private final String name;          // tickles a bug in oldjavac
     private final String[] aliases;     // tickles a bug in oldjavac
-    private Set<String> aliasSet = null;
+    private Set<String> aliasSet;
 
     /**
      * Initializes a new charset with the given canonical name and alias
@@ -667,14 +720,12 @@ public abstract class Charset
      * @return  An immutable set of this charset's aliases
      */
     public final Set<String> aliases() {
-        if (aliasSet != null)
-            return aliasSet;
-        int n = aliases.length;
-        HashSet<String> hs = new HashSet<>(n);
-        for (int i = 0; i < n; i++)
-            hs.add(aliases[i]);
-        aliasSet = Collections.unmodifiableSet(hs);
-        return aliasSet;
+        Set<String> set = this.aliasSet;
+        if (set == null) {
+            set = Set.of(aliases);
+            this.aliasSet = set;
+        }
+        return set;
     }
 
     /**
@@ -697,6 +748,7 @@ public abstract class Charset
      *
      * @return  {@code true} if, and only if, this charset is known by its
      *          implementor to be registered with the IANA
+     * @spec http://www.iana.org/assignments/character-sets Character Sets
      */
     public final boolean isRegistered() {
         return !name.startsWith("X-") && !name.startsWith("x-");
@@ -788,11 +840,12 @@ public abstract class Charset
      * <p> An invocation of this method upon a charset {@code cs} returns the
      * same result as the expression
      *
-     * <pre>
+     * {@snippet lang=java :
      *     cs.newDecoder()
      *       .onMalformedInput(CodingErrorAction.REPLACE)
      *       .onUnmappableCharacter(CodingErrorAction.REPLACE)
-     *       .decode(bb); </pre>
+     *       .decode(bb);
+     * }
      *
      * except that it is potentially more efficient because it can cache
      * decoders between successive invocations.
@@ -824,11 +877,12 @@ public abstract class Charset
      * <p> An invocation of this method upon a charset {@code cs} returns the
      * same result as the expression
      *
-     * <pre>
+     * {@snippet lang=java :
      *     cs.newEncoder()
      *       .onMalformedInput(CodingErrorAction.REPLACE)
      *       .onUnmappableCharacter(CodingErrorAction.REPLACE)
-     *       .encode(bb); </pre>
+     *       .encode(bb);
+     * }
      *
      * except that it is potentially more efficient because it can cache
      * encoders between successive invocations.
@@ -859,8 +913,9 @@ public abstract class Charset
      * <p> An invocation of this method upon a charset {@code cs} returns the
      * same result as the expression
      *
-     * <pre>
-     *     cs.encode(CharBuffer.wrap(s)); </pre>
+     * {@snippet lang=java :
+     *     cs.encode(CharBuffer.wrap(s));
+     * }
      *
      * @param  str  The string to be encoded
      *

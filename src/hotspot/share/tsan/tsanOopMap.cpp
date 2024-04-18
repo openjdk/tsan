@@ -230,14 +230,14 @@ namespace TsanOopMapImpl {
     // ResourceMark.
     OccupancyMap(char *mem_begin, char *mem_end)
         : mem_begin_(mem_begin), mem_end_(mem_end),
-          bitmap_((mem_end - mem_begin) / HeapWordSize) {}
+          bitmap_((mem_end - mem_begin) / HeapWordSize, mtInternal) {}
     bool is_range_vacant(char *from, char *to) const {
       assert(from < to, "bad range");
       assert(from >= mem_begin_ && from < mem_end_,
              "start address outside range");
       assert(to > mem_begin_ && to <= mem_end_, "end address outside range");
       BitMap::idx_t idx_to = to_idx(to);
-      return bitmap_.get_next_one_offset(to_idx(from), idx_to) == idx_to;
+      return bitmap_.find_first_set_bit(to_idx(from), idx_to) == idx_to;
     }
     void range_occupy(char *from, char *to) {
       assert(from < to, "range_occupy: bad range");
@@ -423,8 +423,6 @@ namespace TsanOopMapImpl {
   void TsanOopSizeMap::rebuild_oops_map(BoolObjectClosure *is_alive,
                                         OopClosure *pointer_adjuster) {
     ResourceMark rm;
-    GCTraceTime(Debug, gc) tt_top("Tsan relocate");
-    GCTraceCPUTime tcpu;
     GrowableArray<PendingMove> moves(MAX2((int)(oop_map->size() / 100),
                                           100000));
     bool disjoint_regions;
@@ -432,7 +430,6 @@ namespace TsanOopMapImpl {
     char *min_low, *max_high;
 
     {
-      GCTraceTime(Debug, gc) tt_collect("Collect oops");
       disjoint_regions = collect_oops(is_alive, pointer_adjuster, &moves,
                                       &n_downward_moves, &min_low, &max_high);
     }
@@ -443,8 +440,6 @@ namespace TsanOopMapImpl {
     // Notifying TSan is straightforward when source and target regions
     // do not overlap:
     if (disjoint_regions) {
-      GCTraceTime(Debug, gc) tt_disjoint("Move between regions");
-
       for (int i = 0; i < moves.length(); ++i) {
         const PendingMove &m = moves.at(i);
         __tsan_java_move(m.source_begin(), m.target_begin(), m.n_bytes);
@@ -461,14 +456,11 @@ namespace TsanOopMapImpl {
     // order otherwise), chances are we will be able to order the moves in a few
     // traversals of the moves array.
     {
-      GCTraceTime(Debug, gc) tt_sort("Sort moves");
-
       moves.sort((2 * n_downward_moves > moves.length()) ? lessThan : moreThan);
       log_debug(gc)("Tsan: sort %d objects", moves.length());
     }
 
     {
-      GCTraceTime(Debug, gc) tt_sort("Move");
       handle_overlapping_moves(moves, min_low, max_high);
     }
   }
