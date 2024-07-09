@@ -26,6 +26,12 @@
 #ifndef SHARE_TSAN_TSANOOPMAP_HPP
 #define SHARE_TSAN_TSANOOPMAP_HPP
 
+#include "tsan/tsanOopMapTable.hpp"
+
+// Forward declarations
+class OopStorage;
+
+// FIXME!!!
 // Interface class to manage oop addresses for ThreadSanitizer.
 // TSAN needs to keep track of all allocated Java objects, in order to keep
 // TSAN's metadata updated. When an object becomes free or moved, there should
@@ -41,14 +47,19 @@
 //    (other functions are not called from a multithreaded context)
 
 class TsanOopMap : public AllStatic {
+  static volatile bool _has_work;
 public:
   // Called by primordial thread to initialize oop mapping.
   static void initialize_map();
   static void destroy();
   // Called to clean up oops that have been saved in our mapping,
   // but which no longer have other references in the heap.
-  static void weak_oops_do(BoolObjectClosure* is_alive,
-                           OopClosure* f);
+  //static void weak_oops_do(BoolObjectClosure* is_alive,
+  //                         OopClosure* f);
+
+  static void set_needs_cleaning();
+  static void gc_notification(size_t num_dead_entries);
+
   // Main operation; must be thread-safe and safepoint-free.
   // Called when an object is used as a monitor.
   // The first time addr is seen, __tsan_java_alloc is called.
@@ -58,6 +69,18 @@ public:
 #ifdef ASSERT
   static bool exists(oopDesc* addr);
 #endif
+
+  static OopStorage* oop_storage();
+
+  static bool has_work();
+
+  static void trigger_concurrent_work();
+
+  // Called from ServiceThread::service_thread_entry().
+  static void do_concurrent_work(JavaThread* jt);
+
+  void reset();
+  void release();
 };
 
 #endif // SHARE_TSAN_TSANOOPMAP_HPP

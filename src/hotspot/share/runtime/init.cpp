@@ -127,7 +127,8 @@ jint init_globals() {
   if (status != JNI_OK)
     return status;
 
-  TSAN_RUNTIME_ONLY(
+  // Allocate weak storage unconditionally if INCLUDE_TSAN is true.
+  TSAN_ONLY(
     status = tsan_init();
     if (status != JNI_OK) {
       return status;
