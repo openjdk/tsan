@@ -34,6 +34,7 @@
 #include "gc/shared/weakProcessorTimes.hpp"
 #include "gc/shared/workerThread.hpp"
 #include "prims/resolvedMethodTable.hpp"
+#include "tsan/tsanOopMap.hpp"
 #include "utilities/debug.hpp"
 #include "utilities/enumIterator.hpp"
 
@@ -94,6 +95,8 @@ void WeakProcessor::Task::work(uint worker_id,
       _times->record_worker_items(worker_id, id, cl.new_dead(), cl.total());
     }
   }
+
+  TsanOopMap::update();
 }
 
 class WeakProcessor::WeakOopsDoTask : public WorkerTask {
@@ -150,6 +153,9 @@ void WeakProcessor::weak_oops_do(WorkerThreads* workers,
   uint nworkers = ergo_workers(workers->max_workers());
   WeakProcessorTimes times(nworkers);
   weak_oops_do(workers, is_alive, keep_alive, &times);
+
+  TsanOopMap::update();
+
   times.log_subtotals(indent_log); // Caller logs total if desired.
 }
 

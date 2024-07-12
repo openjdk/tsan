@@ -138,6 +138,8 @@ class BitMap {
   // Return the array of bitmap words, or a specific word from it.
   bm_word_t* map()                 { return _map; }
   const bm_word_t* map() const     { return _map; }
+  // Used by Tsan,
+  bm_word_t  map(idx_t word) const { return _map[word]; }
 
   // Return a pointer to the word containing the specified bit.
   bm_word_t* word_addr(idx_t bit) {

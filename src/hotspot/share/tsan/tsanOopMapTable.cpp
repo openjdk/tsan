@@ -102,9 +102,23 @@ jlong TsanOopMapTable::find(oop obj) {
   return size == nullptr ? 0 : *size;
 }
 
-void TsanOopMapTable::do_concurrent_work() {
+void TsanOopMapTable::do_concurrent_work(GrowableArray<TsanOopMapImpl::PendingMove> *moves,
+                                         char **src_low, char **src_high,
+                                         char **dest_low, char **dest_high,
+                                         int *n_downward_moves) {
   struct IsDead {
-    IsDead() {}
+    GrowableArray<TsanOopMapImpl::PendingMove> *_moves;
+    char **_src_low;
+    char **_src_high;
+    char **_dest_low;
+    char **_dest_high;
+    int  *_n_downward_moves;
+    IsDead(GrowableArray<TsanOopMapImpl::PendingMove> *moves,
+           char **src_low, char **src_high,
+           char **dest_low, char **dest_high,
+           int  *n_downward_moves) : _moves(moves), _src_low(src_low), _src_high(src_high),
+                                     _dest_low(dest_low), _dest_high(dest_high),
+                                     _n_downward_moves(n_downward_moves) {}
     bool do_entry(TsanOopMapTableKey& entry, uintx size) {
       oop wh_obj = entry.object_no_keepalive();
       if (wh_obj == nullptr) {
@@ -119,12 +133,24 @@ void TsanOopMapTable::do_concurrent_work() {
 
         return true;
       } else if (wh_obj != entry.obj()) {
-        tty->print("##### __tsan_java_move " PTR_FORMAT " -> " PTR_FORMAT "\n", (long unsigned int)entry.obj(), (long unsigned int)wh_obj);
-        __tsan_java_move(entry.obj(), wh_obj, size * HeapWordSize);
+        //tty->print("##### __tsan_java_move " PTR_FORMAT " -> " PTR_FORMAT "\n", (long unsigned int)entry.obj(), (long unsigned int)wh_obj);
+
+        TsanOopMapImpl::PendingMove move =
+          {(char *)entry.obj(), (char *)wh_obj, size * HeapWordSize};
+        _moves->append(move);
+        *_src_low = MIN2(*_src_low, move.source_begin());
+        *_src_high = MAX2(*_src_high, move.source_end());
+        *_dest_low = MIN2(*_dest_low, move.target_begin());
+        *_dest_high = MAX2(*_dest_high, move.target_end());
+        if (*_dest_low < *_src_low) {
+          ++(*_n_downward_moves);
+        }
+
+        //__tsan_java_move(entry.obj(), wh_obj, size * HeapWordSize);
         entry.update_obj(); 
       }
       return false;
     } 
-  } is_dead;
+  } is_dead(moves, src_low, src_high, dest_low, dest_high, n_downward_moves);
   _table.unlink(&is_dead);
 }

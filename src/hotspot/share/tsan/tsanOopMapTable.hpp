@@ -29,6 +29,7 @@
 #include "memory/allocation.hpp"
 #include "oops/oop.inline.hpp"
 #include "oops/weakHandle.hpp"
+#include "tsan/tsanOopMap.hpp"
 #include "utilities/resizeableResourceHash.hpp"
 
 // For tracking the lifecycle (alloc/move/free) of interesting oops
@@ -89,6 +90,8 @@ class TsanOopMapTable : public CHeapObj<mtInternal> {
   TsanOopMapTable();
   ~TsanOopMapTable();
 
+  unsigned size() const { return _table.table_size(); };
+
   bool is_empty(); 
   void set_needs_cleaning(bool need_cleaning) { _needs_cleaning = need_cleaning; }
 
@@ -96,7 +99,10 @@ class TsanOopMapTable : public CHeapObj<mtInternal> {
 
   jlong find(oop obj);
 
-  void do_concurrent_work();
+  void do_concurrent_work(GrowableArray<TsanOopMapImpl::PendingMove> *moves,
+                          char **src_low, char **src_high,
+                          char **dest_low, char **dest_high,
+                          int  *n_downward_moves);
 };
 
 #endif // SHARE_VM_PRIMS_TSAN_OOPMAPTABLE_HPP
