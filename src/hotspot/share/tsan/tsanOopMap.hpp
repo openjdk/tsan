@@ -81,7 +81,7 @@ public:
   static OopStorage* oop_storage();
 
   // Used by GC. FIXME
-  static void update();
+  static void notify_tsan_for_freed_and_moved_objects();
 
   //static bool has_work();
 

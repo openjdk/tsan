@@ -60,7 +60,7 @@ TsanOopMapTable::~TsanOopMapTable() {
 
 bool TsanOopMapTable::is_empty() {
   //assert(SafepointSynchronize::is_at_safepoint(), "sanity");
-  // FIXME: check if locked
+  //assert(TsanOopMap_lock->is_locked(), "sanity check");
   return _table.number_of_entries() == 0; 
 }
 

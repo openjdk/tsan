@@ -292,8 +292,8 @@ void TsanOopMap::gc_notification(size_t num_dead_entries) {
   );
 }
 
-// Can be called by GC threads.
-void TsanOopMap::update() {
+// FIXME: Called by GC threads.
+void TsanOopMap::notify_tsan_for_freed_and_moved_objects() {
   if (_oop_map == nullptr) {
     return;
   }

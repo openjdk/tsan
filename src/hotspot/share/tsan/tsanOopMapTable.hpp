@@ -59,8 +59,8 @@ class TsanOopMapTableKey : public CHeapObj<mtInternal> {
   }
 
   static bool equals(const TsanOopMapTableKey& lhs, const TsanOopMapTableKey& rhs) {
-    oop lhs_obj = lhs._obj != nullptr ? lhs._obj : lhs.object_no_keepalive();
-    oop rhs_obj = rhs._obj != nullptr ? rhs._obj : rhs.object_no_keepalive();
+    oop lhs_obj = lhs._obj != nullptr ? (oop)lhs._obj : lhs.object_no_keepalive();
+    oop rhs_obj = rhs._obj != nullptr ? (oop)rhs._obj : rhs.object_no_keepalive();
     return lhs_obj == rhs_obj; 
   } 
 };
