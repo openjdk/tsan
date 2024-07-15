@@ -55,16 +55,9 @@ void notify_jvmti_tagmaps() {
 #endif // INCLUDE_JVMTI
 }
 
-void notify_tsan_oopmap() {
-  TSAN_RUNTIME_ONLY(
-    TsanOopMap::set_needs_cleaning(); 
-  );
-}
-
 void WeakProcessor::weak_oops_do(BoolObjectClosure* is_alive, OopClosure* keep_alive) {
 
   notify_jvmti_tagmaps();
-  notify_tsan_oopmap();
 
   for (OopStorage* storage : OopStorageSet::Range<OopStorageSet::WeakId>()) {
     if (storage->should_report_num_dead()) {
@@ -113,7 +106,6 @@ void WeakProcessor::Task::initialize() {
     _times->set_active_workers(_nworkers);
   }
   notify_jvmti_tagmaps();
-  notify_tsan_oopmap();
 }
 
 WeakProcessor::Task::Task(uint nworkers) : Task(nullptr, nworkers) {}

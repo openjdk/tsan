@@ -48,18 +48,6 @@ extern "C" int jio_printf(const char *fmt, ...);
 #endif
 
 namespace TsanOopMapImpl {
-#if 0
-  struct PendingMove {
-    char *source_begin() const { return source_address; }
-    char *source_end() const { return source_address + n_bytes; }
-    char *target_begin() const { return target_address; }
-    char *target_end() const { return target_address + n_bytes; }
-    char *source_address;
-    char *target_address;
-    size_t n_bytes;  // number of bytes being moved
-  };
-#endif
-
   // Two little callbacks used by sort.
   int lessThan(PendingMove *l, PendingMove *r) {
     char *left = l->target_begin();
@@ -71,13 +59,12 @@ namespace TsanOopMapImpl {
     return lessThan(r, l);
   }
 
-  // FIXME
   class TsanOopBitMap : public CHeapBitMap {
     public:
       TsanOopBitMap() : CHeapBitMap(mtInternal) {}
       TsanOopBitMap(idx_t size_in_bits) : CHeapBitMap(size_in_bits, mtInternal) {}
 
-      // From JDK 11.
+      // Following functions are from JDK 11 BitMap. They no longer exist in JDK 21.
       static idx_t word_index(idx_t bit)  { return bit >> LogBitsPerWord; }
       static idx_t word_align_up(idx_t bit) {
         return align_up(bit, BitsPerWord);
@@ -203,13 +190,11 @@ namespace TsanOopMapImpl {
     // be fairly large, scope this code and insert a ResourceMark
     ResourceMark rm;
     OccupancyMap occupied_memory(min_low, max_high);
-#if 0
     DEBUG_PRINT("%s:%d: %d objects occupying %d words between %p and %p\n",
                 __FUNCTION__, __LINE__, moves.length(),
                 occupied_memory.bit_count(),
                 MIN2(source_low, target_low),
                 MAX2(source_high, target_high));
-#endif
     for (int i = 0; i < moves.length(); ++i) {
       PendingMove &m = moves.at(i);
       occupied_memory.range_occupy(m.source_begin(), m.source_end());
@@ -275,15 +260,11 @@ namespace TsanOopMapImpl {
   }
 }  // namespace TsanOopMapImpl
 
-volatile bool TsanOopMap::_has_work = false; 
 static OopStorage* _weak_oop_storage;
 static TsanOopMapTable* _oop_map;
 
-DEBUG_ONLY(static bool notified_needs_cleaning = false;)
-static bool _needs_cleaning = false;
-
 // This is called with TSAN_ONLY, as we want to always create the weak
-// OopStorage.
+// OopStorage so the number matches with the 'weak_count' in oopStorageSet.hpp.
 void TsanOopMap::initialize_map() {
   _weak_oop_storage = OopStorageSet::create_weak("Tsan weak OopStorage", mtInternal);
   assert(_weak_oop_storage != NULL, "sanity");
@@ -303,39 +284,16 @@ OopStorage* TsanOopMap::oop_storage() {
   return _weak_oop_storage;
 }
 
-void TsanOopMap::set_needs_cleaning() {
-  assert(SafepointSynchronize::is_at_safepoint(), "called in gc pause");
-  assert(Thread::current()->is_VM_thread(), "should be the VM thread");
-  DEBUG_ONLY(notified_needs_cleaning = true;)
-  // FIXME: lock?
-  _oop_map->set_needs_cleaning(!_oop_map->is_empty());
-} 
-
 void TsanOopMap::gc_notification(size_t num_dead_entries) {
+  // FIXME
   TSAN_RUNTIME_ONLY(
-    assert(notified_needs_cleaning, "missing GC notification");
-    DEBUG_ONLY(notified_needs_cleaning = false;)
-
-    MutexLocker mu(TsanOopMap_lock, Mutex::_no_safepoint_check_flag);
-    trigger_concurrent_work(); 
-    _oop_map->set_needs_cleaning(false);
+    //MutexLocker mu(TsanOopMap_lock, Mutex::_no_safepoint_check_flag);
+    //trigger_concurrent_work(); 
   );
-}
-
-void TsanOopMap::trigger_concurrent_work() {
-  MutexLocker ml(Service_lock, Mutex::_no_safepoint_check_flag);
-  Atomic::store(&_has_work, true);
-  Service_lock->notify_all();
-}
-
-bool TsanOopMap::has_work() {
-  return Atomic::load_acquire(&_has_work);
 }
 
 // Can be called by GC threads.
 void TsanOopMap::update() {
-  //assert_not_at_safepoint();
-
   if (_oop_map == nullptr) {
     return;
   }
@@ -351,7 +309,7 @@ void TsanOopMap::update() {
   ResourceMark rm;
   GrowableArray<TsanOopMapImpl::PendingMove> moves(MAX2((int)(_oop_map->size()), 100000));
 
-  tty->print("############################ TsanOopMap::do_concurrent_work\n");
+  //tty->print("############################ TsanOopMap::do_concurrent_work\n");
   MutexLocker mu(TsanOopMap_lock, Mutex::_no_safepoint_check_flag);
   {
     _oop_map->do_concurrent_work(&moves, &source_low, &source_high,
@@ -359,7 +317,6 @@ void TsanOopMap::update() {
                                  &n_downward_moves);
   }
 
-#if 1
   // No lock is needed after this point. FIXME
   if (moves.length() != 0) {
     // Notify Tsan about moved objects.
@@ -383,14 +340,8 @@ void TsanOopMap::update() {
       handle_overlapping_moves(moves, min_low, max_high);
     }
   }
-#endif
 
-  Atomic::release_store(&_has_work, false);
-  tty->print("################################## TsanOopMap::do_concurrent_work done\n");
-}
-
-void TsanOopMap::do_concurrent_work(JavaThread* jt) {
-  //update();
+  //tty->print("################################## TsanOopMap::do_concurrent_work done\n");
 }
 
 // Safe to deal with raw oop; for example this is called in a LEAF function
@@ -404,19 +355,18 @@ void TsanOopMap::add_oop_with_size(oopDesc *addr, int size) {
   bool added = false;
   {
     MutexLocker mu(TsanOopMap_lock, Mutex::_no_safepoint_check_flag);
-    // FIXME!!! N.B. addr->size() may not be available yet!
     added = _oop_map->add_oop_with_size(addr, size);  
   }
   if (added) {
-    tty->print("##### __tsan_java_alloc: " PTR_FORMAT ", " PTR_FORMAT "\n", (long unsigned int)addr, (long unsigned int)addr + size * HeapWordSize);
+    // FIXME: tty->print("##### __tsan_java_alloc: " PTR_FORMAT ", " PTR_FORMAT "\n", (long unsigned int)addr, (long unsigned int)addr + size * HeapWordSize);
     __tsan_java_alloc(addr, size * HeapWordSize);
-  } else {
-    tty->print("+++++ obj not added, already in table: " PTR_FORMAT ", " PTR_FORMAT "\n", (long unsigned int)addr, (long unsigned int)addr + size * HeapWordSize);
   }
 }
 
 void TsanOopMap::add_oop(oopDesc *addr) {
-  // FIXME: N.B. oop's size field must be init'ed; else addr->size() crashes.
+  // We need object size when notify tsan about a freed object.
+  // We cannot call size() for an object after it's freed, so we
+  // need to save the size information in the table.
   add_oop_with_size(addr, addr->size());
 }
 

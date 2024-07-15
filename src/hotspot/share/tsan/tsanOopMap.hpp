@@ -50,7 +50,7 @@ namespace TsanOopMapImpl {
 // TSAN needs to keep track of all allocated Java objects, in order to keep
 // TSAN's metadata updated. When an object becomes free or moved, there should
 // be a call to __tsan_java_free or __tsan_java_move accordingly.
-// The map is implemented as a hash map of oop address to oop size.
+// FIXME!!! The map is implemented as a hash map of oop address to oop size.
 // Oop size must be cached, as it is unsafe to call size() after reference is
 // collected.
 // Turn it on with -XX:+ThreadSanitizer
@@ -61,17 +61,12 @@ namespace TsanOopMapImpl {
 //    (other functions are not called from a multithreaded context)
 
 class TsanOopMap : public AllStatic {
-  static volatile bool _has_work;
 public:
   // Called by primordial thread to initialize oop mapping.
   static void initialize_map();
   static void destroy();
-  // Called to clean up oops that have been saved in our mapping,
-  // but which no longer have other references in the heap.
-  //static void weak_oops_do(BoolObjectClosure* is_alive,
-  //                         OopClosure* f);
 
-  static void set_needs_cleaning();
+  //static void set_needs_cleaning();
   static void gc_notification(size_t num_dead_entries);
 
   // Main operation; must be thread-safe and safepoint-free.
@@ -86,16 +81,14 @@ public:
 
   static OopStorage* oop_storage();
 
+  // Used by GC. FIXME
   static void update();
 
-  static bool has_work();
+  //static bool has_work();
 
-  static void trigger_concurrent_work();
+  //static void trigger_concurrent_work();
 
-  // Called from ServiceThread::service_thread_entry().
-  static void do_concurrent_work(JavaThread* jt);
-
-  void reset();
+  // FIXME
   void release();
 };
 
