@@ -45,14 +45,10 @@ namespace TsanOopMapImpl {
 
 #include "tsan/tsanOopMapTable.hpp"
 
-// FIXME!!!
 // Interface class to manage oop addresses for ThreadSanitizer.
 // TSAN needs to keep track of all allocated Java objects, in order to keep
 // TSAN's metadata updated. When an object becomes free or moved, there should
 // be a call to __tsan_java_free or __tsan_java_move accordingly.
-// FIXME!!! The map is implemented as a hash map of oop address to oop size.
-// Oop size must be cached, as it is unsafe to call size() after reference is
-// collected.
 // Turn it on with -XX:+ThreadSanitizer
 //
 // Some invariants:
@@ -66,8 +62,6 @@ public:
   static void initialize_map();
   static void destroy();
 
-  static void gc_notification(size_t num_dead_entries);
-
   // Main operation; must be thread-safe and safepoint-free.
   // Called when an object is used as a monitor.
   // The first time addr is seen, __tsan_java_alloc is called.
@@ -80,12 +74,8 @@ public:
 
   static OopStorage* oop_storage();
 
-  // Used by GC. FIXME
+  // Used by GC.
   static void notify_tsan_for_freed_and_moved_objects();
-
-  //static bool has_work();
-
-  //static void trigger_concurrent_work();
 
   // FIXME
   void release();

@@ -58,12 +58,6 @@ TsanOopMapTable::~TsanOopMapTable() {
   // FIXME
 }
 
-bool TsanOopMapTable::is_empty() {
-  //assert(SafepointSynchronize::is_at_safepoint(), "sanity");
-  //assert(TsanOopMap_lock->is_locked(), "sanity check");
-  return _table.number_of_entries() == 0; 
-}
-
 bool TsanOopMapTable::add_oop_with_size(oop obj, int size) {
   TsanOopMapTableKey new_entry(obj);
   bool added;
@@ -74,6 +68,12 @@ bool TsanOopMapTable::add_oop_with_size(oop obj, int size) {
     *v = size;
   }
   return added;
+}
+
+#ifdef ASSERT
+bool TsanOopMapTable::is_empty() {
+  assert(TsanOopMap_lock->is_locked(), "sanity check");
+  return _table.number_of_entries() == 0;
 }
 
 jlong TsanOopMapTable::find(oop obj) {
@@ -89,6 +89,7 @@ jlong TsanOopMapTable::find(oop obj) {
   jlong* size = _table.get(item);
   return size == nullptr ? 0 : *size;
 }
+#endif
 
 // - Notify Tsan about freed objects.
 // - Colllect objects moved bt GC and add a PendingMove for each moved

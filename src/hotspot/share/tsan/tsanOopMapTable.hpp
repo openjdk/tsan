@@ -81,11 +81,12 @@ class TsanOopMapTable : public CHeapObj<mtInternal> {
 
   unsigned size() const { return _table.table_size(); };
 
-  bool is_empty(); 
-
   bool add_oop_with_size(oop obj, int size);
 
+#ifdef ASSERT
+  bool is_empty();
   jlong find(oop obj);
+#endif
 
   void collect_moved_objects_and_notify_freed(
            GrowableArray<TsanOopMapImpl::PendingMove> *moves,

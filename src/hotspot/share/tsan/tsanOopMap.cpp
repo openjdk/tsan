@@ -269,9 +269,12 @@ static TsanOopMapTable* _oop_map;
 // This is called with TSAN_ONLY, as we want to always create the weak
 // OopStorage so the number matches with the 'weak_count' in oopStorageSet.hpp.
 void TsanOopMap::initialize_map() {
+  // No need to do register_num_dead_callback for concurrent work as we do
+  // TsanOopMapTable cleanup, i.e. removing entries for freed objects during
+  // GC by calling TsanOopMap::notify_tsan_for_freed_and_moved_objects() from
+  // WeakProcessor.
   _weak_oop_storage = OopStorageSet::create_weak("Tsan weak OopStorage", mtInternal);
   assert(_weak_oop_storage != NULL, "sanity");
-  _weak_oop_storage->register_num_dead_callback(&TsanOopMap::gc_notification);
 
   TSAN_RUNTIME_ONLY(
     _oop_map = new TsanOopMapTable();
@@ -287,15 +290,7 @@ OopStorage* TsanOopMap::oop_storage() {
   return _weak_oop_storage;
 }
 
-void TsanOopMap::gc_notification(size_t num_dead_entries) {
-  // FIXME
-  TSAN_RUNTIME_ONLY(
-    //MutexLocker mu(TsanOopMap_lock, Mutex::_no_safepoint_check_flag);
-    //trigger_concurrent_work(); 
-  );
-}
-
-// FIXME: Called by GC threads.
+// Called during GC by WeakProcessor.
 void TsanOopMap::notify_tsan_for_freed_and_moved_objects() {
   if (_oop_map == nullptr) {
     return;
@@ -312,15 +307,15 @@ void TsanOopMap::notify_tsan_for_freed_and_moved_objects() {
   ResourceMark rm;
   GrowableArray<TsanOopMapImpl::PendingMove> moves(MAX2((int)(_oop_map->size()), 100000));
 
-  MutexLocker mu(TsanOopMap_lock, Mutex::_no_safepoint_check_flag);
   {
+    MutexLocker mu(TsanOopMap_lock, Mutex::_no_safepoint_check_flag);
     _oop_map->collect_moved_objects_and_notify_freed(
                                  &moves, &source_low, &source_high,
                                  &target_low, &target_high,
                                  &n_downward_moves);
   }
 
-  // No lock is needed after this point. FIXME
+  // No lock is needed after this point.
   if (moves.length() != 0) {
     // Notify Tsan about moved objects.
     disjoint_regions = (source_low >= target_high || source_high <= target_low);
