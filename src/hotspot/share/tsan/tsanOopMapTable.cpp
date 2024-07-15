@@ -30,24 +30,7 @@
 TsanOopMapTableKey::TsanOopMapTableKey(oop obj) {
   _wh = WeakHandle(TsanOopMap::oop_storage(), obj);
   _obj = obj;
-  // FIXME: set size
 }
-
-TsanOopMapTableKey::TsanOopMapTableKey(oop obj, int size) {
-  _wh = WeakHandle(TsanOopMap::oop_storage(), obj);
-  _obj = obj;
-  _size = size;
-}
-
-#if 0
-TsanOopMapTableKey::TsanOopMapTableKey(const TsanOopMapTableKey& src) {
-  // FIXME
-  _wh.release(TsanOopMap::oop_storage());
-  _wh = WeakHandle();
-  _obj = nullptr;
-  _size = 0;
-}
-#endif
 
 void TsanOopMapTableKey::release_weak_handle() const {
   _wh.release(TsanOopMap::oop_storage());
@@ -102,10 +85,14 @@ jlong TsanOopMapTable::find(oop obj) {
   return size == nullptr ? 0 : *size;
 }
 
-void TsanOopMapTable::do_concurrent_work(GrowableArray<TsanOopMapImpl::PendingMove> *moves,
-                                         char **src_low, char **src_high,
-                                         char **dest_low, char **dest_high,
-                                         int *n_downward_moves) {
+// - Notify Tsan about freed objects.
+// - Colllect objects moved bt GC and add a PendingMove for each moved
+//   objects in a GrowableArray.
+void TsanOopMapTable::collect_moved_objects_and_notify_freed(
+         GrowableArray<TsanOopMapImpl::PendingMove> *moves,
+         char **src_low, char **src_high,
+         char **dest_low, char **dest_high,
+         int *n_downward_moves) {
   struct IsDead {
     GrowableArray<TsanOopMapImpl::PendingMove> *_moves;
     char **_src_low;
@@ -126,11 +113,6 @@ void TsanOopMapTable::do_concurrent_work(GrowableArray<TsanOopMapImpl::PendingMo
         tty->print("##### __tsan_java_free " PTR_FORMAT "\n", (long unsigned int)entry.obj());
         __tsan_java_free((char *)entry.obj(), size * HeapWordSize);
         entry.release_weak_handle();
-        //auto clean = [] (const TsanOopMapTableKey& entry) {
-        //  entry.release_weak_handle();
-        //};
-        //_table.remove(entry, clean);
-
         return true;
       } else if (wh_obj != entry.obj()) {
         //tty->print("##### __tsan_java_move " PTR_FORMAT " -> " PTR_FORMAT "\n", (long unsigned int)entry.obj(), (long unsigned int)wh_obj);
@@ -146,7 +128,6 @@ void TsanOopMapTable::do_concurrent_work(GrowableArray<TsanOopMapImpl::PendingMo
           ++(*_n_downward_moves);
         }
 
-        //__tsan_java_move(entry.obj(), wh_obj, size * HeapWordSize);
         entry.update_obj(); 
       }
       return false;

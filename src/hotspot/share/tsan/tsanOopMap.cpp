@@ -312,7 +312,8 @@ void TsanOopMap::update() {
   //tty->print("############################ TsanOopMap::do_concurrent_work\n");
   MutexLocker mu(TsanOopMap_lock, Mutex::_no_safepoint_check_flag);
   {
-    _oop_map->do_concurrent_work(&moves, &source_low, &source_high,
+    _oop_map->collect_moved_objects_and_notify_freed(
+                                 &moves, &source_low, &source_high,
                                  &target_low, &target_high,
                                  &n_downward_moves);
   }
@@ -333,10 +334,6 @@ void TsanOopMap::update() {
         __tsan_java_move(m.source_begin(), m.target_begin(), m.n_bytes);
       }
     } else {
-      // FIXME: add comments from TsanOopSizeMap::rebuild_oops_map for sorting
-      //moves.sort((2 * n_downward_moves > moves.length()) ?
-      //              TsanOopMapImpl::lessThan : TsanOopMapImpl::moreThan);
-
       handle_overlapping_moves(moves, min_low, max_high);
     }
   }

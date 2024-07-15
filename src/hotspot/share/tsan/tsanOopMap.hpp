@@ -66,7 +66,6 @@ public:
   static void initialize_map();
   static void destroy();
 
-  //static void set_needs_cleaning();
   static void gc_notification(size_t num_dead_entries);
 
   // Main operation; must be thread-safe and safepoint-free.

@@ -41,10 +41,6 @@
 #include "prims/jvmtiTagMap.hpp"
 #endif // INCLUDE_JVMTI
 
-#if INCLUDE_TSAN
-#include "tsan/tsanOopMap.hpp"
-#endif
-
 void notify_jvmti_tagmaps() {
 #if INCLUDE_JVMTI
   // Notify JVMTI tagmaps that a STW weak reference processing might be

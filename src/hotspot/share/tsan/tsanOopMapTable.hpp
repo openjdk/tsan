@@ -38,19 +38,12 @@ class TsanOopMapTableKey : public CHeapObj<mtInternal> {
  private:
   WeakHandle _wh;
 
-  // Address of the oop pointed to by the WeakHandle. Note tis is not
-  // updated by GC.
+  // Address of the oop pointed to by the WeakHandle.
+  // FIXME: needed?
   oopDesc *_obj;
-
-  // We cache the oop's size, since we cannot reliably determine it after
-  // the oop is freed. Size is measured in number of HeapWords.
-  // FIXME: needed? Remove!
-  uintx _size;
 
  public:
   TsanOopMapTableKey(oop obj);
-  TsanOopMapTableKey(oop obj, int size);
-  //TsanOopMapTableKey(const TsanOopMapTableKey& src);
   TsanOopMapTableKey& operator=(const TsanOopMapTableKey&) = delete;
 
   void release_weak_handle() const;
@@ -60,13 +53,11 @@ class TsanOopMapTableKey : public CHeapObj<mtInternal> {
   void update_obj(); 
 
   static unsigned get_hash(const TsanOopMapTableKey& entry) {
-    // FIXME
     assert(entry._obj != nullptr, "sanity");
     return (unsigned int)entry._obj->identity_hash();
   }
 
   static bool equals(const TsanOopMapTableKey& lhs, const TsanOopMapTableKey& rhs) {
-    // FIXME: check size?
     oop lhs_obj = lhs._obj != nullptr ? lhs._obj : lhs.object_no_keepalive();
     oop rhs_obj = rhs._obj != nullptr ? rhs._obj : rhs.object_no_keepalive();
     return lhs_obj == rhs_obj; 
@@ -82,7 +73,6 @@ ResizeableResourceHashtable <TsanOopMapTableKey, jlong,
 class TsanOopMapTable : public CHeapObj<mtInternal> {
  private:
   RRHT _table;
-  bool _needs_cleaning;
 
  public:
   TsanOopMapTable();
@@ -91,16 +81,16 @@ class TsanOopMapTable : public CHeapObj<mtInternal> {
   unsigned size() const { return _table.table_size(); };
 
   bool is_empty(); 
-  void set_needs_cleaning(bool need_cleaning) { _needs_cleaning = need_cleaning; }
 
   bool add_oop_with_size(oop obj, int size);
 
   jlong find(oop obj);
 
-  void do_concurrent_work(GrowableArray<TsanOopMapImpl::PendingMove> *moves,
-                          char **src_low, char **src_high,
-                          char **dest_low, char **dest_high,
-                          int  *n_downward_moves);
+  void collect_moved_objects_and_notify_freed(
+           GrowableArray<TsanOopMapImpl::PendingMove> *moves,
+           char **src_low, char **src_high,
+           char **dest_low, char **dest_high,
+           int  *n_downward_moves);
 };
 
 #endif // SHARE_VM_PRIMS_TSAN_OOPMAPTABLE_HPP
