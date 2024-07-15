@@ -238,6 +238,9 @@ namespace TsanOopMapImpl {
         }
         if (can_move) {
           // Notify TSan, update occupied region.
+          log_trace(tsan)("__tsan_java_move for [" PTR_FORMAT ", " PTR_FORMAT  "] -> [" PTR_FORMAT ", " PTR_FORMAT "]\n",
+                       (uintx)m.source_begin(), (uintx)m.source_end(),
+                       (uintx)m.target_begin(), (uintx)m.target_end());
           __tsan_java_move(m.source_begin(), m.target_begin(), m.n_bytes);
           occupied_memory.range_vacate(m.source_begin(), m.source_end());
           occupied_memory.range_occupy(m.target_begin(), m.target_end());
@@ -309,7 +312,6 @@ void TsanOopMap::notify_tsan_for_freed_and_moved_objects() {
   ResourceMark rm;
   GrowableArray<TsanOopMapImpl::PendingMove> moves(MAX2((int)(_oop_map->size()), 100000));
 
-  //tty->print("############################ TsanOopMap::do_concurrent_work\n");
   MutexLocker mu(TsanOopMap_lock, Mutex::_no_safepoint_check_flag);
   {
     _oop_map->collect_moved_objects_and_notify_freed(
@@ -330,15 +332,15 @@ void TsanOopMap::notify_tsan_for_freed_and_moved_objects() {
     if (disjoint_regions) {
       for (int i = 0; i < moves.length(); ++i) {
         const TsanOopMapImpl::PendingMove &m = moves.at(i);
-        tty->print("##### __tsan_java_move [" PTR_FORMAT ", " PTR_FORMAT  "] -> [" PTR_FORMAT ", " PTR_FORMAT "]\n", (long unsigned int)m.source_begin(), (long unsigned int)m.source_end(), (long unsigned int)m.target_begin(), (long unsigned int)m.target_end());
+        log_trace(tsan)("__tsan_java_move for [" PTR_FORMAT ", " PTR_FORMAT  "] -> [" PTR_FORMAT ", " PTR_FORMAT "]\n",
+                       (uintx)m.source_begin(), (uintx)m.source_end(),
+                       (uintx)m.target_begin(), (uintx)m.target_end());
         __tsan_java_move(m.source_begin(), m.target_begin(), m.n_bytes);
       }
     } else {
       handle_overlapping_moves(moves, min_low, max_high);
     }
   }
-
-  //tty->print("################################## TsanOopMap::do_concurrent_work done\n");
 }
 
 // Safe to deal with raw oop; for example this is called in a LEAF function
@@ -355,7 +357,8 @@ void TsanOopMap::add_oop_with_size(oopDesc *addr, int size) {
     added = _oop_map->add_oop_with_size(addr, size);  
   }
   if (added) {
-    // FIXME: tty->print("##### __tsan_java_alloc: " PTR_FORMAT ", " PTR_FORMAT "\n", (long unsigned int)addr, (long unsigned int)addr + size * HeapWordSize);
+    log_trace(tsan)("__tsan_java_alloc for: " PTR_FORMAT ", " PTR_FORMAT "\n",
+                    (uintx)addr, (uintx)addr + size * HeapWordSize);
     __tsan_java_alloc(addr, size * HeapWordSize);
   }
 }
