@@ -32,6 +32,11 @@ TsanOopMapTableKey::TsanOopMapTableKey(oop obj) {
   _obj = obj;
 }
 
+TsanOopMapTableKey::TsanOopMapTableKey(const TsanOopMapTableKey& src) {
+  _wh = src._wh;
+  _obj = src._obj;
+}
+
 void TsanOopMapTableKey::release_weak_handle() const {
   _wh.release(TsanOopMap::oop_storage());
 }
