@@ -39,14 +39,6 @@
 #include "utilities/bitMap.inline.hpp"
 #include "utilities/resizeableResourceHash.hpp"
 
-extern "C" int jio_printf(const char *fmt, ...);
-
-#if 0
-#define DEBUG_PRINT(...) jio_printf(__VA_ARGS__)
-#else
-#define DEBUG_PRINT(...)
-#endif
-
 namespace TsanOopMapImpl {
   // Two little callbacks used by sort.
   int lessThan(PendingMove *l, PendingMove *r) {
@@ -190,11 +182,10 @@ namespace TsanOopMapImpl {
     // be fairly large, scope this code and insert a ResourceMark
     ResourceMark rm;
     OccupancyMap occupied_memory(min_low, max_high);
-    DEBUG_PRINT("%s:%d: %d objects occupying %d words between %p and %p\n",
-                __FUNCTION__, __LINE__, moves.length(),
-                occupied_memory.bit_count(),
-                MIN2(source_low, target_low),
-                MAX2(source_high, target_high));
+    log_trace(tsan)("%s:%d: %d objects occupying %d words between %p and %p\n",
+                     __FUNCTION__, __LINE__, moves.length(),
+                     occupied_memory.bit_count(),
+                     min_low, max_high);
     for (int i = 0; i < moves.length(); ++i) {
       PendingMove &m = moves.at(i);
       occupied_memory.range_occupy(m.source_begin(), m.source_end());
@@ -239,8 +230,8 @@ namespace TsanOopMapImpl {
         if (can_move) {
           // Notify TSan, update occupied region.
           log_trace(tsan)("__tsan_java_move for [" PTR_FORMAT ", " PTR_FORMAT  "] -> [" PTR_FORMAT ", " PTR_FORMAT "]\n",
-                       (uintx)m.source_begin(), (uintx)m.source_end(),
-                       (uintx)m.target_begin(), (uintx)m.target_end());
+                          (uintx)m.source_begin(), (uintx)m.source_end(),
+                          (uintx)m.target_begin(), (uintx)m.target_end());
           __tsan_java_move(m.source_begin(), m.target_begin(), m.n_bytes);
           occupied_memory.range_vacate(m.source_begin(), m.source_end());
           occupied_memory.range_occupy(m.target_begin(), m.target_end());
@@ -256,8 +247,8 @@ namespace TsanOopMapImpl {
       guarantee(remaining_moves >= moves_this_cycle,
                 "Excessive number of moves");
       remaining_moves -= moves_this_cycle;
-      DEBUG_PRINT("%s:%d: %d moved, %d remaining\n", __FUNCTION__, __LINE__,
-                  moves_this_cycle, remaining_moves);
+      log_trace(tsan)("%s:%d: %d moved, %d remaining\n", __FUNCTION__, __LINE__,
+                      moves_this_cycle, remaining_moves);
     }
     log_debug(gc)("Tsan: Move %d passes", passes);
   }
@@ -328,8 +319,8 @@ void TsanOopMap::notify_tsan_for_freed_and_moved_objects() {
       for (int i = 0; i < moves.length(); ++i) {
         const TsanOopMapImpl::PendingMove &m = moves.at(i);
         log_trace(tsan)("__tsan_java_move for [" PTR_FORMAT ", " PTR_FORMAT  "] -> [" PTR_FORMAT ", " PTR_FORMAT "]\n",
-                       (uintx)m.source_begin(), (uintx)m.source_end(),
-                       (uintx)m.target_begin(), (uintx)m.target_end());
+                        (uintx)m.source_begin(), (uintx)m.source_end(),
+                        (uintx)m.target_begin(), (uintx)m.target_end());
         __tsan_java_move(m.source_begin(), m.target_begin(), m.n_bytes);
       }
     } else {
