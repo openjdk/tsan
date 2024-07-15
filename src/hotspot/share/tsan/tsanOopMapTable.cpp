@@ -79,6 +79,13 @@ bool TsanOopMapTable::add_oop_with_size(oop obj, int size) {
     jlong* v = _table.put_if_absent(new_entry, size, &added);
     *v = size;
   }
+
+  if (added) {
+    if (_table.maybe_grow(true /* use_large_table_sizes */)) {
+      log_info(tsan)("TsanOopMapTable resize to %d, %d entries",
+                     _table.table_size(), _table.number_of_entries());
+    }
+  }
   return added;
 }
 
