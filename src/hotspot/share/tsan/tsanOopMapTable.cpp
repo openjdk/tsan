@@ -54,8 +54,20 @@ void TsanOopMapTableKey::update_obj() {
 
 TsanOopMapTable::TsanOopMapTable() : _table(512, 0x3fffffff) {}
 
+void TsanOopMapTable::clear() {
+  struct RemoveAll {
+    bool do_entry(const TsanOopMapTableKey & entry, uintx size) {
+      entry.release_weak_handle();
+      return true;
+    }
+  } remove_all;
+
+  _table.unlink(&remove_all);
+  assert(_table.number_of_entries() == 0, "invariant");
+}
+
 TsanOopMapTable::~TsanOopMapTable() {
-  // FIXME
+  clear();
 }
 
 bool TsanOopMapTable::add_oop_with_size(oop obj, int size) {

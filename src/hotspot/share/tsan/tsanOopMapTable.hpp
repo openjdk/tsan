@@ -38,8 +38,10 @@ class TsanOopMapTableKey : public CHeapObj<mtInternal> {
  private:
   WeakHandle _wh;
 
-  // Address of the oop pointed to by the WeakHandle.
-  // FIXME: needed?
+  // Address of the oop tracked by the WeakHandle.
+  // After an object is freed, the WeakHandle points to null oop. We
+  // need to cache the original oop address for notifying Tsan after
+  // the object is freed.
   oopDesc *_obj;
 
  public:
@@ -71,6 +73,8 @@ ResizeableResourceHashtable <TsanOopMapTableKey, jlong,
                              TsanOopMapTableKey::get_hash,
                              TsanOopMapTableKey::equals> RRHT;
 
+// The TsanOopMapTable contains entries of TsanOopMapTableKey:oop_size pairs
+// (as key:value).
 class TsanOopMapTable : public CHeapObj<mtInternal> {
  private:
   RRHT _table;
@@ -78,6 +82,8 @@ class TsanOopMapTable : public CHeapObj<mtInternal> {
  public:
   TsanOopMapTable();
   ~TsanOopMapTable();
+
+  void clear();
 
   unsigned size() const { return _table.table_size(); };
 

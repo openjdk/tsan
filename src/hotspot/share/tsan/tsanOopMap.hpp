@@ -76,9 +76,6 @@ public:
 
   // Used by GC.
   static void notify_tsan_for_freed_and_moved_objects();
-
-  // FIXME
-  void release();
 };
 
 #endif // SHARE_TSAN_TSANOOPMAP_HPP
