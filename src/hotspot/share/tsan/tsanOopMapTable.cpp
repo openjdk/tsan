@@ -49,7 +49,7 @@ void TsanOopMapTableKey::update_obj() {
   oop obj = _wh.peek();
   if (obj != nullptr && obj != _obj) {
     _obj = obj;
-  } 
+  }
 }
 
 TsanOopMapTable::TsanOopMapTable() : _table(512, 0x3fffffff) {}
@@ -74,7 +74,7 @@ bool TsanOopMapTable::add_oop_with_size(oop obj, int size) {
   TsanOopMapTableKey new_entry(obj);
   bool added;
   if (obj->fast_no_hash_check()) {
-    added = _table.put_when_absent(new_entry, size); 
+    added = _table.put_when_absent(new_entry, size);
   } else {
     jlong* v = _table.put_if_absent(new_entry, size, &added);
     *v = size;
@@ -134,7 +134,7 @@ void TsanOopMapTable::collect_moved_objects_and_notify_freed(
     bool do_entry(TsanOopMapTableKey& entry, uintx size) {
       oop wh_obj = entry.object_no_keepalive();
       if (wh_obj == nullptr) {
-        log_trace(tsan)("__tsan_java_free for " PTR_FORMAT "\n", (long unsigned int)entry.obj()); 
+        log_trace(tsan)("__tsan_java_free for " PTR_FORMAT "\n", (long unsigned int)entry.obj());
         __tsan_java_free((char *)entry.obj(), size * HeapWordSize);
         entry.release_weak_handle();
         return true;
@@ -150,10 +150,10 @@ void TsanOopMapTable::collect_moved_objects_and_notify_freed(
           ++(*_n_downward_moves);
         }
 
-        entry.update_obj(); 
+        entry.update_obj();
       }
       return false;
-    } 
+    }
   } is_dead(moves, src_low, src_high, dest_low, dest_high, n_downward_moves);
   _table.unlink(&is_dead);
 }

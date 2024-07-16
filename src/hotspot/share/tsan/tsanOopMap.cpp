@@ -65,7 +65,7 @@ namespace TsanOopMapImpl {
         return word_align_up(bit) == bit;
       }
 
-      // This is from JDK 11 BitMap. 
+      // This is from JDK 11 BitMap.
       idx_t get_next_one_offset(idx_t l_offset, idx_t r_offset) const {
         assert(l_offset <= size(), "BitMap index out of bounds");
         assert(r_offset <= size(), "BitMap index out of bounds");
@@ -126,7 +126,7 @@ namespace TsanOopMapImpl {
           }
         }
         return r_offset;
-      } 
+      }
   };
 
   // Maintains the occupancy state of the given heap memory area.
@@ -340,7 +340,7 @@ void TsanOopMap::add_oop_with_size(oopDesc *addr, int size) {
   bool added = false;
   {
     MutexLocker mu(TsanOopMap_lock, Mutex::_no_safepoint_check_flag);
-    added = _oop_map->add_oop_with_size(addr, size);  
+    added = _oop_map->add_oop_with_size(addr, size);
   }
   if (added) {
     log_trace(tsan)("__tsan_java_alloc for: " PTR_FORMAT ", " PTR_FORMAT "\n",
@@ -364,7 +364,7 @@ bool TsanOopMap::exists(oopDesc *addr) {
   jlong oop_size = 0;
   {
     MutexLocker mu(TsanOopMap_lock, Mutex::_no_safepoint_check_flag);
-    oop_size = _oop_map->find(addr); 
+    oop_size = _oop_map->find(addr);
   }
   return oop_size != 0;
 }
