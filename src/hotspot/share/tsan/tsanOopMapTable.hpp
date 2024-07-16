@@ -53,7 +53,7 @@ class TsanOopMapTableKey : public CHeapObj<mtInternal> {
   oop object_no_keepalive() const;
 
   oop obj() const { return _obj; };
-  void update_obj(); 
+  void update_obj();
 
   static unsigned get_hash(const TsanOopMapTableKey& entry) {
     assert(entry._obj != nullptr, "sanity");
