@@ -156,10 +156,6 @@ void WeakProcessor::weak_oops_do(WorkerThreads* workers,
   WeakProcessorTimes times(nworkers);
   weak_oops_do(workers, is_alive, keep_alive, &times);
 
-  TSAN_RUNTIME_ONLY(
-    TsanOopMap::notify_tsan_for_freed_and_moved_objects();
-  );
-
   times.log_subtotals(indent_log); // Caller logs total if desired.
 }
 
