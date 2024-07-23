@@ -26,24 +26,10 @@
 #ifndef SHARE_TSAN_TSANOOPMAP_HPP
 #define SHARE_TSAN_TSANOOPMAP_HPP
 
+#include "tsan/tsanOopMapTable.hpp"
+
 // Forward declarations
 class OopStorage;
-
-namespace TsanOopMapImpl {
-
-  struct PendingMove {
-    char *source_begin() const { return source_address; }
-    char *source_end() const { return source_address + n_bytes; }
-    char *target_begin() const { return target_address; }
-    char *target_end() const { return target_address + n_bytes; }
-    char *source_address;
-    char *target_address;
-    size_t n_bytes;  // number of bytes being moved
-  };
-
-}  // namespace TsanOopMapImpl
-
-#include "tsan/tsanOopMapTable.hpp"
 
 // Interface class to manage oop addresses for ThreadSanitizer.
 // TSAN needs to keep track of all allocated Java objects, in order to keep

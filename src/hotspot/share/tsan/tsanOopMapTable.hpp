@@ -32,6 +32,20 @@
 #include "tsan/tsanOopMap.hpp"
 #include "utilities/resizeableResourceHash.hpp"
 
+namespace TsanOopMapImpl {
+
+  struct PendingMove {
+    char *source_begin() const { return source_address; }
+    char *source_end() const { return source_address + n_bytes; }
+    char *target_begin() const { return target_address; }
+    char *target_end() const { return target_address + n_bytes; }
+    char *source_address;
+    char *target_address;
+    size_t n_bytes;  // number of bytes being moved
+  };
+
+}  // namespace TsanOopMapImpl
+
 // For tracking the lifecycle (alloc/move/free) of interesting oops
 // that tsan needs to know.
 class TsanOopMapTableKey : public CHeapObj<mtInternal> {
