@@ -51,84 +51,6 @@ namespace TsanOopMapImpl {
     return lessThan(r, l);
   }
 
-  class TsanOopBitMap : public CHeapBitMap {
-    public:
-      TsanOopBitMap() : CHeapBitMap(mtInternal) {}
-      TsanOopBitMap(idx_t size_in_bits) : CHeapBitMap(size_in_bits, mtInternal) {}
-
-      // Following functions are from JDK 11 BitMap. They no longer exist in JDK 21.
-      static idx_t word_index(idx_t bit)  { return bit >> LogBitsPerWord; }
-      static idx_t word_align_up(idx_t bit) {
-        return align_up(bit, BitsPerWord);
-      }
-      static bool is_word_aligned(idx_t bit) {
-        return word_align_up(bit) == bit;
-      }
-
-      // This is from JDK 11 BitMap.
-      idx_t get_next_one_offset(idx_t l_offset, idx_t r_offset) const {
-        assert(l_offset <= size(), "BitMap index out of bounds");
-        assert(r_offset <= size(), "BitMap index out of bounds");
-        assert(l_offset <= r_offset, "l_offset > r_offset ?");
-
-        if (l_offset == r_offset) {
-          return l_offset;
-        }
-        idx_t   index = word_index(l_offset);
-        idx_t r_index = word_index(r_offset-1) + 1;
-        idx_t res_offset = l_offset;
-
-        // check bits including and to the _left_ of offset's position
-        idx_t pos = bit_in_word(res_offset);
-        bm_word_t res = map(index) >> pos;
-        if (res != 0) {
-          // find the position of the 1-bit
-          for (; !(res & 1); res_offset++) {
-            res = res >> 1;
-          }
-
-#ifdef ASSERT
-          // In the following assert, if r_offset is not bitamp word aligned,
-          // checking that res_offset is strictly less than r_offset is too
-          // strong and will trip the assert.
-          //
-          // Consider the case where l_offset is bit 15 and r_offset is bit 17
-          // of the same map word, and where bits [15:16:17:18] == [00:00:00:01].
-          // All the bits in the range [l_offset:r_offset) are 0.
-          // The loop that calculates res_offset, above, would yield the offset
-          // of bit 18 because it's in the same map word as l_offset and there
-          // is a set bit in that map word above l_offset (i.e. res != NoBits).
-          //
-          // In this case, however, we can assert is that res_offset is strictly
-          // less than size() since we know that there is at least one set bit
-          // at an offset above, but in the same map word as, r_offset.
-          // Otherwise, if r_offset is word aligned then it will not be in the
-          // same map word as l_offset (unless it equals l_offset). So either
-          // there won't be a set bit between l_offset and the end of it's map
-          // word (i.e. res == NoBits), or res_offset will be less than r_offset.
-
-          idx_t limit = is_word_aligned(r_offset) ? r_offset : size();
-          assert(res_offset >= l_offset && res_offset < limit, "just checking");
-#endif // ASSERT
-          return MIN2(res_offset, r_offset);
-        }
-        // skip over all word length 0-bit runs
-        for (index++; index < r_index; index++) {
-          res = map(index);
-          if (res != 0) {
-            // found a 1, return the offset
-            for (res_offset = bit_index(index); !(res & 1); res_offset++) {
-              res = res >> 1;
-            }
-            assert(res & 1, "tautology; see loop condition");
-            assert(res_offset >= l_offset, "just checking");
-            return MIN2(res_offset, r_offset);
-          }
-        }
-        return r_offset;
-      }
-  };
-
   // Maintains the occupancy state of the given heap memory area.
   class OccupancyMap: public StackObj {
     // Internally it is a BitMap. A bit is set if the corresponding HeapWord
@@ -136,7 +58,7 @@ namespace TsanOopMapImpl {
     // allocation unit).
     char *mem_begin_;
     char *mem_end_;
-    TsanOopBitMap bitmap_;
+    CHeapBitMap bitmap_;
     BitMap::idx_t to_idx(char *mem) const {
       return (mem - mem_begin_) / HeapWordSize;
     }
@@ -147,14 +69,14 @@ namespace TsanOopMapImpl {
     // ResourceMark.
     OccupancyMap(char *mem_begin, char *mem_end)
         : mem_begin_(mem_begin), mem_end_(mem_end),
-          bitmap_((mem_end - mem_begin) / HeapWordSize) {}
+          bitmap_((mem_end - mem_begin) / HeapWordSize, mtInternal) {}
     bool is_range_vacant(char *from, char *to) const {
       assert(from < to, "bad range");
       assert(from >= mem_begin_ && from < mem_end_,
              "start address outside range");
       assert(to > mem_begin_ && to <= mem_end_, "end address outside range");
       BitMap::idx_t idx_to = to_idx(to);
-      return bitmap_.get_next_one_offset(to_idx(from), idx_to) == idx_to;
+      return bitmap_.find_first_set_bit(to_idx(from), idx_to) == idx_to;
     }
     void range_occupy(char *from, char *to) {
       assert(from < to, "range_occupy: bad range");
