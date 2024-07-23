@@ -265,7 +265,7 @@ void TsanOopMap::initialize_map() {
   // GC by calling TsanOopMap::notify_tsan_for_freed_and_moved_objects() from
   // WeakProcessor.
   _weak_oop_storage = OopStorageSet::create_weak("Tsan weak OopStorage", mtInternal);
-  assert(_weak_oop_storage != NULL, "sanity");
+  assert(_weak_oop_storage != nullptr, "sanity");
 
   TSAN_RUNTIME_ONLY(
     _oop_map = new TsanOopMapTable();
@@ -283,9 +283,8 @@ OopStorage* TsanOopMap::oop_storage() {
 
 // Called during GC by WeakProcessor.
 void TsanOopMap::notify_tsan_for_freed_and_moved_objects() {
-  if (_oop_map == nullptr) {
-    return;
-  }
+  assert(_oop_map != nullptr, "must be");
+  assert(SafepointSynchronize::is_at_safepoint(), "must be");
 
   bool disjoint_regions;
   int n_downward_moves = 0;
@@ -313,6 +312,9 @@ void TsanOopMap::notify_tsan_for_freed_and_moved_objects() {
     min_low = MIN2(source_low, target_low);
     max_high = MAX2(source_high, target_high);
 
+    // Source and target ranges overlap, the moves need to be ordered to prevent
+    // overwriting. Overall, this can take N^2 steps if only one object can be
+    // moved during the array traversal.
     moves.sort((2 * n_downward_moves > moves.length()) ?
                   TsanOopMapImpl::lessThan : TsanOopMapImpl::moreThan);
     if (disjoint_regions) {
