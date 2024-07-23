@@ -104,10 +104,10 @@ namespace TsanOopMapImpl {
     // be fairly large, scope this code and insert a ResourceMark
     ResourceMark rm;
     OccupancyMap occupied_memory(min_low, max_high);
-    log_trace(tsan)("%s:%d: %d objects occupying %d words between %p and %p\n",
-                     __FUNCTION__, __LINE__, moves.length(),
-                     occupied_memory.bit_count(),
-                     min_low, max_high);
+    log_debug(tsan)("%s:%d: %d objects occupying %d words between %p and %p\n",
+                    __FUNCTION__, __LINE__, moves.length(),
+                    occupied_memory.bit_count(),
+                    min_low, max_high);
     for (int i = 0; i < moves.length(); ++i) {
       PendingMove &m = moves.at(i);
       occupied_memory.range_occupy(m.source_begin(), m.source_end());
@@ -169,8 +169,8 @@ namespace TsanOopMapImpl {
       guarantee(remaining_moves >= moves_this_cycle,
                 "Excessive number of moves");
       remaining_moves -= moves_this_cycle;
-      log_trace(tsan)("%s:%d: %d moved, %d remaining\n", __FUNCTION__, __LINE__,
-                      moves_this_cycle, remaining_moves);
+      log_debug(tsan)("%s:%d: %d moved, %d remaining\n", __FUNCTION__, __LINE__,
+                       moves_this_cycle, remaining_moves);
     }
     log_debug(gc)("Tsan: Move %d passes", passes);
   }
