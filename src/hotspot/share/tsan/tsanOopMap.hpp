@@ -41,6 +41,14 @@ class OopStorage;
 // 1. add_*() is only passed a live oop.
 // 2. add_*() must be thread-safe wrt itself.
 //    (other functions are not called from a multithreaded context)
+//
+// WeakHandles are used to track Java objects for TSAN (see tsanOopMapTable.hpp
+// for details). We create OopStorge for TSAN and WeakHandles used by TsanOopMap
+// are allocated from the TSAN OopStorage. Since we need to notify TSAN to
+// update TSAN metadata "in time" for moved and freed Java objects (before any
+// mutators read/write those), we cannot do that concurrently, e.g. in
+// ServiceThread. Instead we process the moved & freed objects and notify
+// TSAN a during STW GC pause.
 
 class TsanOopMap : public AllStatic {
 public:
