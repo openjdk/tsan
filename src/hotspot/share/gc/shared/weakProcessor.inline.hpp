@@ -155,7 +155,6 @@ void WeakProcessor::weak_oops_do(WorkerThreads* workers,
   uint nworkers = ergo_workers(workers->max_workers());
   WeakProcessorTimes times(nworkers);
   weak_oops_do(workers, is_alive, keep_alive, &times);
-
   times.log_subtotals(indent_log); // Caller logs total if desired.
 }
 
