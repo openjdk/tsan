@@ -71,6 +71,7 @@ class TsanOopMapTableKey : public CHeapObj<mtInternal> {
 
   static unsigned get_hash(const TsanOopMapTableKey& entry) {
     assert(entry._obj != nullptr, "sanity");
+    assert(entry._obj == entry.object_no_keepalive(), "sanity");
     return (unsigned int)entry._obj->identity_hash();
   }
 
