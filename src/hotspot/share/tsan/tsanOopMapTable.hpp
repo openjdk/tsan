@@ -22,8 +22,8 @@
  *
  */
 
-#ifndef SHARE_VM_PRIMS_TSAN_OOPMAPTABLE_HPP
-#define SHARE_VM_PRIMS_TSAN_OOPMAPTABLE_HPP
+#ifndef SHARE_TSAN_TSANOOPMAPTABLE_HPP
+#define SHARE_TSAN_TSANOOPMAPTABLE_HPP
 
 #include "gc/shared/collectedHeap.hpp"
 #include "memory/allocation.hpp"
@@ -115,4 +115,4 @@ class TsanOopMapTable : public CHeapObj<mtInternal> {
            int  *n_downward_moves);
 };
 
-#endif // SHARE_VM_PRIMS_TSAN_OOPMAPTABLE_HPP
+#endif // SHARE_TSAN_TSANOOPMAPTABLE_HPP
