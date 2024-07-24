@@ -60,7 +60,7 @@ public:
   // Called when an object is used as a monitor.
   // The first time addr is seen, __tsan_java_alloc is called.
   static void add_oop(oopDesc* addr);
-  static void add_oop_with_size(oopDesc* addr, int size);
+  static void add_oop_with_size(oopDesc* addr, size_t size);
 
 #ifdef ASSERT
   static bool exists(oopDesc* addr);

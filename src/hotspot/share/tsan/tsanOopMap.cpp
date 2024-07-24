@@ -257,7 +257,7 @@ void TsanOopMap::notify_tsan_for_freed_and_moved_objects() {
 // There is no safepoint in this code: 1) special mutex is used, and
 // 2) there is no VM state transition
 // We cannot use ordinary VM mutex, as that requires a state transition.
-void TsanOopMap::add_oop_with_size(oopDesc *addr, int size) {
+void TsanOopMap::add_oop_with_size(oopDesc *addr, size_t size) {
   DEBUG_ONLY(NoSafepointVerifier nsv;)
   assert(_oop_map != NULL, "TsanOopMapTable not initialized");
   guarantee(addr != NULL, "null oop");
@@ -285,7 +285,7 @@ bool TsanOopMap::exists(oopDesc *addr) {
   DEBUG_ONLY(NoSafepointVerifier nsv;)
   assert(_oop_map != NULL, "TsanOopMap not initialized");
   guarantee(addr != NULL, "null oop");
-  jlong oop_size = 0;
+  size_t oop_size = 0;
   {
     MutexLocker mu(TsanOopMap_lock, Mutex::_no_safepoint_check_flag);
     oop_size = _oop_map->find(addr);

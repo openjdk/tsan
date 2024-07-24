@@ -82,7 +82,7 @@ class TsanOopMapTableKey : public CHeapObj<mtInternal> {
 };
 
 typedef
-ResizeableResourceHashtable <TsanOopMapTableKey, jlong,
+ResizeableResourceHashtable <TsanOopMapTableKey, size_t,
                              AnyObj::C_HEAP, mtInternal,
                              TsanOopMapTableKey::get_hash,
                              TsanOopMapTableKey::equals> RRHT;
@@ -102,11 +102,11 @@ class TsanOopMapTable : public CHeapObj<mtInternal> {
 
   unsigned size() const { return _table.table_size(); };
 
-  bool add_oop_with_size(oop obj, int size);
+  bool add_oop_with_size(oop obj, size_t size);
 
 #ifdef ASSERT
-  bool is_empty();
-  jlong find(oop obj);
+  bool   is_empty();
+  size_t find(oop obj);
 #endif
 
   void collect_moved_objects_and_notify_freed(

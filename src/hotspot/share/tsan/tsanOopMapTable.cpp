@@ -70,13 +70,13 @@ TsanOopMapTable::~TsanOopMapTable() {
   clear();
 }
 
-bool TsanOopMapTable::add_oop_with_size(oop obj, int size) {
+bool TsanOopMapTable::add_oop_with_size(oop obj, size_t size) {
   TsanOopMapTableKey new_entry(obj);
   bool added;
   if (obj->fast_no_hash_check()) {
     added = _table.put_when_absent(new_entry, size);
   } else {
-    jlong* v = _table.put_if_absent(new_entry, size, &added);
+    size_t* v = _table.put_if_absent(new_entry, size, &added);
     *v = size;
   }
 
@@ -95,7 +95,7 @@ bool TsanOopMapTable::is_empty() {
   return _table.number_of_entries() == 0;
 }
 
-jlong TsanOopMapTable::find(oop obj) {
+size_t TsanOopMapTable::find(oop obj) {
   if (is_empty()) {
     return 0;
   }
@@ -105,7 +105,7 @@ jlong TsanOopMapTable::find(oop obj) {
   }
 
   TsanOopMapTableKey item(obj);
-  jlong* size = _table.get(item);
+  size_t* size = _table.get(item);
   return size == nullptr ? 0 : *size;
 }
 #endif
