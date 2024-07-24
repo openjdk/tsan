@@ -88,7 +88,8 @@ ResizeableResourceHashtable <TsanOopMapTableKey, jlong,
                              TsanOopMapTableKey::equals> RRHT;
 
 // The TsanOopMapTable contains entries of TsanOopMapTableKey:oop_size pairs
-// (as key:value).
+// (as key:value). The oop sizes are saved in the table because we need to
+// use the size information when notify TSAN about an freed object.
 class TsanOopMapTable : public CHeapObj<mtInternal> {
  private:
   RRHT _table;
