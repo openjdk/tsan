@@ -234,11 +234,6 @@ void TsanOopMap::notify_tsan_for_freed_and_moved_objects() {
     min_low = MIN2(source_low, target_low);
     max_high = MAX2(source_high, target_high);
 
-    // Source and target ranges overlap, the moves need to be ordered to prevent
-    // overwriting. Overall, this can take N^2 steps if only one object can be
-    // moved during the array traversal.
-    moves.sort((2 * n_downward_moves > moves.length()) ?
-                  TsanOopMapImpl::lessThan : TsanOopMapImpl::moreThan);
     if (disjoint_regions) {
       for (int i = 0; i < moves.length(); ++i) {
         const TsanOopMapImpl::PendingMove &m = moves.at(i);
@@ -248,6 +243,11 @@ void TsanOopMap::notify_tsan_for_freed_and_moved_objects() {
         __tsan_java_move(m.source_begin(), m.target_begin(), m.n_bytes);
       }
     } else {
+      // Source and target ranges overlap, the moves need to be ordered to prevent
+      // overwriting. Overall, this can take N^2 steps if only one object can be
+      // moved during the array traversal.
+      moves.sort((2 * n_downward_moves > moves.length()) ?
+                 TsanOopMapImpl::lessThan : TsanOopMapImpl::moreThan);
       handle_overlapping_moves(moves, min_low, max_high);
     }
   }
