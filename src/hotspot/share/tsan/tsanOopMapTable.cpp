@@ -56,7 +56,7 @@ TsanOopMapTable::TsanOopMapTable() : _table(512, 0x3fffffff) {}
 
 void TsanOopMapTable::clear() {
   struct RemoveAll {
-    bool do_entry(const TsanOopMapTableKey & entry, uintx size) {
+    bool do_entry(const TsanOopMapTableKey & entry, size_t size) {
       entry.release_weak_handle();
       return true;
     }
@@ -131,7 +131,7 @@ void TsanOopMapTable::collect_moved_objects_and_notify_freed(
            int  *n_downward_moves) : _moves(moves), _src_low(src_low), _src_high(src_high),
                                      _dest_low(dest_low), _dest_high(dest_high),
                                      _n_downward_moves(n_downward_moves) {}
-    bool do_entry(TsanOopMapTableKey& entry, uintx size) {
+    bool do_entry(TsanOopMapTableKey& entry, size_t size) {
       oop wh_obj = entry.object_no_keepalive();
       if (wh_obj == nullptr) {
         log_trace(tsan)("__tsan_java_free for " PTR_FORMAT "\n", (long unsigned int)entry.obj());
