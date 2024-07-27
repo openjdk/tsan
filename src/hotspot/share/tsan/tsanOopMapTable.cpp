@@ -134,13 +134,13 @@ void TsanOopMapTable::collect_moved_objects_and_notify_freed(
     bool do_entry(TsanOopMapTableKey& entry, size_t size) {
       oop wh_obj = entry.object_no_keepalive();
       if (wh_obj == nullptr) {
-        log_trace(tsan)("__tsan_java_free for " PTR_FORMAT "\n", (long unsigned int)entry.obj());
-        __tsan_java_free((char *)entry.obj(), size * HeapWordSize);
+        log_trace(tsan)("__tsan_java_free for " PTR_FORMAT "\n", cast_from_oop<uintx>(entry.obj()));
+        __tsan_java_free(cast_from_oop<char*>(entry.obj()), size * HeapWordSize);
         entry.release_weak_handle();
         return true;
       } else if (wh_obj != entry.obj()) {
         TsanOopMapImpl::PendingMove move =
-          {(char *)entry.obj(), (char *)wh_obj, size * HeapWordSize};
+          {cast_from_oop<char*>(entry.obj()), cast_from_oop<char*>(wh_obj), size * HeapWordSize};
         _moves->append(move);
         *_src_low = MIN2(*_src_low, move.source_begin());
         *_src_high = MAX2(*_src_high, move.source_end());

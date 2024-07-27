@@ -52,11 +52,11 @@ class TsanOopMapTableKey : public CHeapObj<mtInternal> {
  private:
   WeakHandle _wh;
 
-  // Address of the oop tracked by the WeakHandle.
+  // Pointer to the oop tracked by the WeakHandle.
   // After an object is freed, the WeakHandle points to null oop. We
-  // need to cache the original oop address for notifying Tsan after
-  // the object is freed.
-  oopDesc *_obj;
+  // need to cache the original oop for notifying Tsan after the object
+  // is freed.
+  oop _obj;
 
  public:
   TsanOopMapTableKey(oop obj);
@@ -76,9 +76,7 @@ class TsanOopMapTableKey : public CHeapObj<mtInternal> {
   }
 
   static bool equals(const TsanOopMapTableKey& lhs, const TsanOopMapTableKey& rhs) {
-    oop lhs_obj = lhs._obj != nullptr ? (oop)lhs._obj : lhs.object_no_keepalive();
-    oop rhs_obj = rhs._obj != nullptr ? (oop)rhs._obj : rhs.object_no_keepalive();
-    return lhs_obj == rhs_obj;
+    return lhs._obj == rhs._obj;
   }
 };
 
