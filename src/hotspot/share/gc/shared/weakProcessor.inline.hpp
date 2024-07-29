@@ -34,6 +34,7 @@
 #include "gc/shared/weakProcessorTimes.hpp"
 #include "gc/shared/workerThread.hpp"
 #include "prims/resolvedMethodTable.hpp"
+#include "tsan/tsanOopMap.hpp"
 #include "utilities/debug.hpp"
 #include "utilities/enumIterator.hpp"
 
@@ -94,6 +95,10 @@ void WeakProcessor::Task::work(uint worker_id,
       _times->record_worker_items(worker_id, id, cl.new_dead(), cl.total());
     }
   }
+
+  TSAN_RUNTIME_ONLY(
+    TsanOopMap::notify_tsan_for_freed_and_moved_objects();
+  );
 }
 
 class WeakProcessor::WeakOopsDoTask : public WorkerTask {

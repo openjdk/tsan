@@ -26,38 +26,50 @@
 #ifndef SHARE_TSAN_TSANOOPMAP_HPP
 #define SHARE_TSAN_TSANOOPMAP_HPP
 
+#include "tsan/tsanOopMapTable.hpp"
+
+// Forward declarations
+class OopStorage;
+
 // Interface class to manage oop addresses for ThreadSanitizer.
 // TSAN needs to keep track of all allocated Java objects, in order to keep
 // TSAN's metadata updated. When an object becomes free or moved, there should
 // be a call to __tsan_java_free or __tsan_java_move accordingly.
-// The map is implemented as a hash map of oop address to oop size.
-// Oop size must be cached, as it is unsafe to call size() after reference is
-// collected.
 // Turn it on with -XX:+ThreadSanitizer
 //
 // Some invariants:
 // 1. add_*() is only passed a live oop.
 // 2. add_*() must be thread-safe wrt itself.
 //    (other functions are not called from a multithreaded context)
+//
+// WeakHandles are used to track Java objects for TSAN (see tsanOopMapTable.hpp
+// for details). We create OopStorge for TSAN and WeakHandles used by TsanOopMap
+// are allocated from the TSAN OopStorage. Since we need to notify TSAN to
+// update TSAN metadata "in time" for moved and freed Java objects (before any
+// mutators read/write those), we cannot do that concurrently, e.g. in
+// ServiceThread. Instead we process the moved & freed objects and notify
+// TSAN a during STW GC pause.
 
 class TsanOopMap : public AllStatic {
 public:
   // Called by primordial thread to initialize oop mapping.
   static void initialize_map();
   static void destroy();
-  // Called to clean up oops that have been saved in our mapping,
-  // but which no longer have other references in the heap.
-  static void weak_oops_do(BoolObjectClosure* is_alive,
-                           OopClosure* f);
+
   // Main operation; must be thread-safe and safepoint-free.
   // Called when an object is used as a monitor.
   // The first time addr is seen, __tsan_java_alloc is called.
   static void add_oop(oopDesc* addr);
-  static void add_oop_with_size(oopDesc* addr, int size);
+  static void add_oop_with_size(oopDesc* addr, size_t size);
 
 #ifdef ASSERT
   static bool exists(oopDesc* addr);
 #endif
+
+  static OopStorage* oop_storage();
+
+  // Used by GC.
+  static void notify_tsan_for_freed_and_moved_objects();
 };
 
 #endif // SHARE_TSAN_TSANOOPMAP_HPP
