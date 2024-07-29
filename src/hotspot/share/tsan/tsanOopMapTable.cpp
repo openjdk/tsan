@@ -77,7 +77,7 @@ bool TsanOopMapTable::add_oop_with_size(oop obj, size_t size) {
     added = _table.put_when_absent(new_entry, size);
   } else {
     size_t* v = _table.put_if_absent(new_entry, size, &added);
-    *v = size;
+    assert(*v == size, "sanity");
   }
 
   if (added) {
@@ -146,7 +146,7 @@ void TsanOopMapTable::collect_moved_objects_and_notify_freed(
         *_src_high = MAX2(*_src_high, move.source_end());
         *_dest_low = MIN2(*_dest_low, move.target_begin());
         *_dest_high = MAX2(*_dest_high, move.target_end());
-        if (*_dest_low < *_src_low) {
+        if (move.target_begin() < move.source_begin()) {
           ++(*_n_downward_moves);
         }
 

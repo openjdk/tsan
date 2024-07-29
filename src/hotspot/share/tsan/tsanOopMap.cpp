@@ -30,14 +30,12 @@
 #include "gc/shared/referenceProcessor.hpp"
 #include "memory/resourceArea.hpp"
 #include "oops/oop.inline.hpp"
-#include "runtime/atomic.hpp"
 #include "runtime/mutexLocker.hpp"
 #include "runtime/safepointVerifiers.hpp"
 #include "tsan/tsanExternalDecls.hpp"
 #include "tsan/tsanOopMap.hpp"
 #include "tsan/tsanOopMapTable.hpp"
 #include "utilities/bitMap.inline.hpp"
-#include "utilities/resizeableResourceHash.hpp"
 
 namespace TsanOopMapImpl {
   // Two little callbacks used by sort.
