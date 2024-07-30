@@ -48,7 +48,7 @@ public class TsanRunner {
     vmOpts.add(klass.getName());
 
     ProcessBuilder pb =
-        ProcessTools.createJavaProcessBuilder(vmOpts.toArray(new String[0]));
+        ProcessTools.createLimitedTestJavaProcessBuilder(vmOpts.toArray(new String[0]));
     return new OutputAnalyzer(pb.start());
   }
 
