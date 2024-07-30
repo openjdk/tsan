@@ -2,7 +2,7 @@
 project=tsan
 repository=tsan
 jbs=JDK
-version=21
+version=21.0.3
 
 [checks]
 error=author,committer,reviewers,merge,executable,symlink,message,hg-tag,whitespace,problemlists
