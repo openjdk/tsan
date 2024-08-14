@@ -32,6 +32,8 @@
 #include "tsan/tsanOopMap.hpp"
 #include "utilities/resizeableResourceHash.hpp"
 
+class TsanOopMapTableKey;
+
 namespace TsanOopMapImpl {
 
   struct PendingMove {
@@ -42,6 +44,13 @@ namespace TsanOopMapImpl {
     char *source_address;
     char *target_address;
     size_t n_bytes;  // number of bytes being moved
+  };
+
+  struct MovedEntry {
+    TsanOopMapTableKey* k;
+    size_t v;
+    TsanOopMapTableKey* key() const { return k; }
+    size_t value() const { return v; }
   };
 
 }  // namespace TsanOopMapImpl
@@ -123,7 +132,7 @@ class TsanOopMapTable : public CHeapObj<mtInternal> {
 #endif
 
   void collect_moved_objects_and_notify_freed(
-           GrowableArray<TsanOopMapTableKey*> *moved_entries,
+           GrowableArray<TsanOopMapImpl::MovedEntry> *moved_entries,
            GrowableArray<TsanOopMapImpl::PendingMove> *moves,
            char **src_low, char **src_high,
            char **dest_low, char **dest_high,

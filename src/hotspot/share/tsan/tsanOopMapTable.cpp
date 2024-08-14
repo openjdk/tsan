@@ -122,20 +122,20 @@ size_t TsanOopMapTable::find(oop obj) {
 // - Colllect objects moved bt GC and add a PendingMove for each moved
 //   objects in a GrowableArray.
 void TsanOopMapTable::collect_moved_objects_and_notify_freed(
-         GrowableArray<TsanOopMapTableKey*> *moved_entries,
+         GrowableArray<TsanOopMapImpl::MovedEntry> *moved_entries,
          GrowableArray<TsanOopMapImpl::PendingMove> *moves,
          char **src_low, char **src_high,
          char **dest_low, char **dest_high,
          int *n_downward_moves) {
   struct IsDead {
-    GrowableArray<TsanOopMapTableKey*> *_moved_entries;
+    GrowableArray<TsanOopMapImpl::MovedEntry> *_moved_entries;
     GrowableArray<TsanOopMapImpl::PendingMove> *_moves;
     char **_src_low;
     char **_src_high;
     char **_dest_low;
     char **_dest_high;
     int  *_n_downward_moves;
-    IsDead(GrowableArray<TsanOopMapTableKey*> *moved_entries,
+    IsDead(GrowableArray<TsanOopMapImpl::MovedEntry> *moved_entries,
            GrowableArray<TsanOopMapImpl::PendingMove> *moves,
            char **src_low, char **src_high,
            char **dest_low, char **dest_high,
@@ -165,7 +165,8 @@ void TsanOopMapTable::collect_moved_objects_and_notify_freed(
         entry.update_obj();
 
         TsanOopMapTableKey* new_entry = new TsanOopMapTableKey(entry);
-        _moved_entries->append(new_entry);
+        TsanOopMapImpl::MovedEntry moved_entry = {new_entry, size};
+        _moved_entries->append(moved_entry);
 
         // Unlink the entry without releasing the weak_handle.
         return true;
