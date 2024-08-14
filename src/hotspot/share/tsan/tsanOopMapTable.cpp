@@ -70,6 +70,14 @@ TsanOopMapTable::~TsanOopMapTable() {
   clear();
 }
 
+bool TsanOopMapTable::add_entry(TsanOopMapTableKey *entry, size_t size) {
+  bool added;
+  size_t* v = _table.put_if_absent(*entry, size, &added);
+  assert(added, "must be");
+  assert(*v == size, "sanity");
+  return added;
+}
+
 bool TsanOopMapTable::add_oop_with_size(oop obj, size_t size) {
   TsanOopMapTableKey new_entry(obj);
   bool added;
@@ -114,21 +122,28 @@ size_t TsanOopMapTable::find(oop obj) {
 // - Colllect objects moved bt GC and add a PendingMove for each moved
 //   objects in a GrowableArray.
 void TsanOopMapTable::collect_moved_objects_and_notify_freed(
+         GrowableArray<TsanOopMapTableKey*> *moved_entries,
+         GrowableArray<int> *moved_entry_sizes,
          GrowableArray<TsanOopMapImpl::PendingMove> *moves,
          char **src_low, char **src_high,
          char **dest_low, char **dest_high,
          int *n_downward_moves) {
   struct IsDead {
+    GrowableArray<TsanOopMapTableKey*> *_moved_entries;
+    GrowableArray<int> *_moved_entry_sizes;
     GrowableArray<TsanOopMapImpl::PendingMove> *_moves;
     char **_src_low;
     char **_src_high;
     char **_dest_low;
     char **_dest_high;
     int  *_n_downward_moves;
-    IsDead(GrowableArray<TsanOopMapImpl::PendingMove> *moves,
+    IsDead(GrowableArray<TsanOopMapTableKey*> *moved_entries,
+           GrowableArray<int> *moved_entry_sizes,
+           GrowableArray<TsanOopMapImpl::PendingMove> *moves,
            char **src_low, char **src_high,
            char **dest_low, char **dest_high,
-           int  *n_downward_moves) : _moves(moves), _src_low(src_low), _src_high(src_high),
+           int  *n_downward_moves) : _moved_entries(moved_entries), _moved_entry_sizes(moved_entry_sizes),
+                                     _moves(moves), _src_low(src_low), _src_high(src_high),
                                      _dest_low(dest_low), _dest_high(dest_high),
                                      _n_downward_moves(n_downward_moves) {}
     bool do_entry(TsanOopMapTableKey& entry, size_t size) {
@@ -151,9 +166,16 @@ void TsanOopMapTable::collect_moved_objects_and_notify_freed(
         }
 
         entry.update_obj();
+
+        TsanOopMapTableKey* new_entry = new TsanOopMapTableKey(entry);
+        _moved_entries->append(new_entry);
+        _moved_entry_sizes->append(size);
+
+        // Unlink the entry.
+        return true;
       }
       return false;
     }
-  } is_dead(moves, src_low, src_high, dest_low, dest_high, n_downward_moves);
+  } is_dead(moved_entries, moved_entry_sizes, moves, src_low, src_high, dest_low, dest_high, n_downward_moves);
   _table.unlink(&is_dead);
 }

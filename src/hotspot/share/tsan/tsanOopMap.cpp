@@ -214,15 +214,25 @@ void TsanOopMap::notify_tsan_for_freed_and_moved_objects() {
   char *target_low = reinterpret_cast<char *>(UINTPTR_MAX);
   char *target_high = NULL;
 
+  int len = MAX2((int)(_oop_map->size()), 100000);
   ResourceMark rm;
-  GrowableArray<TsanOopMapImpl::PendingMove> moves(MAX2((int)(_oop_map->size()), 100000));
+  GrowableArray<TsanOopMapImpl::PendingMove> moves(len);
+  GrowableArray<TsanOopMapTableKey*> moved_entries(len);
+  GrowableArray<int> moved_entry_sizes(len);
 
   {
     MutexLocker mu(TsanOopMap_lock, Mutex::_no_safepoint_check_flag);
     _oop_map->collect_moved_objects_and_notify_freed(
+                                 &moved_entries, &moved_entry_sizes,
                                  &moves, &source_low, &source_high,
                                  &target_low, &target_high,
                                  &n_downward_moves);
+
+    for (int i = 0; i < moved_entries.length(); i++) {
+      TsanOopMapTableKey* entry = moved_entries.at(i);
+      //_oop_map->add_entry(entry, moved_entry_sizes.at(i));
+      _oop_map->add_entry(entry, entry->obj()->size());
+    }
   }
 
   // No lock is needed after this point.

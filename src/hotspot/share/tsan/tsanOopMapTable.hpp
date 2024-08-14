@@ -69,10 +69,23 @@ class TsanOopMapTableKey : public CHeapObj<mtInternal> {
   oop obj() const { return _obj; };
   void update_obj();
 
+  // Compute the hash for the entry using the enclosed oop address.
+  // Note that this would return a different hash value when an oop
+  // enclosed by the entry is moved by GC. When that happens, we need
+  // to remove the old entry from the tsanOopMap and insert a new
+  // entry using re-computed hash. That's to prevent the same `oop`
+  // being added to the tsanOopMap and notifing tsan (when `oop` is
+  // moved) more than once.
+  //
+  // We cannot use the `oop` identity hash here, as we need to compute
+  // the hash when trying to add a new `oop` to the tsanOopMap. One of
+  // the case is during InterpreterMacroAssembler::lock_object, which
+  // may cause a new identity hash being computed for an `oop` in some
+  // cases. That could be a hidden issue with `oop` identity hash.
   static unsigned get_hash(const TsanOopMapTableKey& entry) {
     assert(entry._obj != nullptr, "sanity");
     assert(entry._obj == entry.object_no_keepalive(), "sanity");
-    return (unsigned int)entry._obj->identity_hash();
+    return primitive_hash<oopDesc*>(entry._obj);
   }
 
   static bool equals(const TsanOopMapTableKey& lhs, const TsanOopMapTableKey& rhs) {
@@ -101,6 +114,7 @@ class TsanOopMapTable : public CHeapObj<mtInternal> {
 
   unsigned size() const { return _table.table_size(); };
 
+  bool add_entry(TsanOopMapTableKey *entry, size_t size);
   bool add_oop_with_size(oop obj, size_t size);
 
 #ifdef ASSERT
@@ -109,6 +123,8 @@ class TsanOopMapTable : public CHeapObj<mtInternal> {
 #endif
 
   void collect_moved_objects_and_notify_freed(
+           GrowableArray<TsanOopMapTableKey*> *moved_entries,
+           GrowableArray<int> *moved_entry_sizes,
            GrowableArray<TsanOopMapImpl::PendingMove> *moves,
            char **src_low, char **src_high,
            char **dest_low, char **dest_high,
