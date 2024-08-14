@@ -227,8 +227,8 @@ void TsanOopMap::notify_tsan_for_freed_and_moved_objects() {
                                  &target_low, &target_high,
                                  &n_downward_moves);
 
-    // Add back the entries with moved oops. New hashes are computed
-    // using the new oop address for the entries.
+    // Add back the entries with moved oops. New hashes for the entries
+    // are computed using the new oop address.
     for (int i = 0; i < moved_entries.length(); i++) {
       TsanOopMapTableKey* entry = moved_entries.at(i);
       _oop_map->add_entry(entry, entry->obj()->size());

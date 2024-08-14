@@ -139,8 +139,8 @@ void TsanOopMapTable::collect_moved_objects_and_notify_freed(
            GrowableArray<TsanOopMapImpl::PendingMove> *moves,
            char **src_low, char **src_high,
            char **dest_low, char **dest_high,
-           int  *n_downward_moves) : _moved_entries(moved_entries),
-                                     _moves(moves), _src_low(src_low), _src_high(src_high),
+           int  *n_downward_moves) : _moved_entries(moved_entries), _moves(moves),
+                                     _src_low(src_low), _src_high(src_high),
                                      _dest_low(dest_low), _dest_high(dest_high),
                                      _n_downward_moves(n_downward_moves) {}
     bool do_entry(TsanOopMapTableKey& entry, size_t size) {
