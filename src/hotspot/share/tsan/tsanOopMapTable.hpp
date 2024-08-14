@@ -124,7 +124,6 @@ class TsanOopMapTable : public CHeapObj<mtInternal> {
 
   void collect_moved_objects_and_notify_freed(
            GrowableArray<TsanOopMapTableKey*> *moved_entries,
-           GrowableArray<int> *moved_entry_sizes,
            GrowableArray<TsanOopMapImpl::PendingMove> *moves,
            char **src_low, char **src_high,
            char **dest_low, char **dest_high,

@@ -123,14 +123,12 @@ size_t TsanOopMapTable::find(oop obj) {
 //   objects in a GrowableArray.
 void TsanOopMapTable::collect_moved_objects_and_notify_freed(
          GrowableArray<TsanOopMapTableKey*> *moved_entries,
-         GrowableArray<int> *moved_entry_sizes,
          GrowableArray<TsanOopMapImpl::PendingMove> *moves,
          char **src_low, char **src_high,
          char **dest_low, char **dest_high,
          int *n_downward_moves) {
   struct IsDead {
     GrowableArray<TsanOopMapTableKey*> *_moved_entries;
-    GrowableArray<int> *_moved_entry_sizes;
     GrowableArray<TsanOopMapImpl::PendingMove> *_moves;
     char **_src_low;
     char **_src_high;
@@ -138,11 +136,10 @@ void TsanOopMapTable::collect_moved_objects_and_notify_freed(
     char **_dest_high;
     int  *_n_downward_moves;
     IsDead(GrowableArray<TsanOopMapTableKey*> *moved_entries,
-           GrowableArray<int> *moved_entry_sizes,
            GrowableArray<TsanOopMapImpl::PendingMove> *moves,
            char **src_low, char **src_high,
            char **dest_low, char **dest_high,
-           int  *n_downward_moves) : _moved_entries(moved_entries), _moved_entry_sizes(moved_entry_sizes),
+           int  *n_downward_moves) : _moved_entries(moved_entries),
                                      _moves(moves), _src_low(src_low), _src_high(src_high),
                                      _dest_low(dest_low), _dest_high(dest_high),
                                      _n_downward_moves(n_downward_moves) {}
@@ -169,13 +166,12 @@ void TsanOopMapTable::collect_moved_objects_and_notify_freed(
 
         TsanOopMapTableKey* new_entry = new TsanOopMapTableKey(entry);
         _moved_entries->append(new_entry);
-        _moved_entry_sizes->append(size);
 
-        // Unlink the entry.
+        // Unlink the entry without releasing the weak_handle.
         return true;
       }
       return false;
     }
-  } is_dead(moved_entries, moved_entry_sizes, moves, src_low, src_high, dest_low, dest_high, n_downward_moves);
+  } is_dead(moved_entries, moves, src_low, src_high, dest_low, dest_high, n_downward_moves);
   _table.unlink(&is_dead);
 }

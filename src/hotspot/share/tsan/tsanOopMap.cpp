@@ -218,19 +218,19 @@ void TsanOopMap::notify_tsan_for_freed_and_moved_objects() {
   ResourceMark rm;
   GrowableArray<TsanOopMapImpl::PendingMove> moves(len);
   GrowableArray<TsanOopMapTableKey*> moved_entries(len);
-  GrowableArray<int> moved_entry_sizes(len);
 
   {
     MutexLocker mu(TsanOopMap_lock, Mutex::_no_safepoint_check_flag);
     _oop_map->collect_moved_objects_and_notify_freed(
-                                 &moved_entries, &moved_entry_sizes,
+                                 &moved_entries,
                                  &moves, &source_low, &source_high,
                                  &target_low, &target_high,
                                  &n_downward_moves);
 
+    // Add back the entries with moved oops. New hashes are computed
+    // using the new oop address for the entries.
     for (int i = 0; i < moved_entries.length(); i++) {
       TsanOopMapTableKey* entry = moved_entries.at(i);
-      //_oop_map->add_entry(entry, moved_entry_sizes.at(i));
       _oop_map->add_entry(entry, entry->obj()->size());
     }
   }
