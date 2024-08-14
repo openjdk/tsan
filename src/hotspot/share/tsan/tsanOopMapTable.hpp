@@ -94,11 +94,11 @@ class TsanOopMapTableKey : public CHeapObj<mtInternal> {
   static unsigned get_hash(const TsanOopMapTableKey& entry) {
     assert(entry._obj != nullptr, "sanity");
     assert(entry._obj == entry.object_no_keepalive(), "sanity");
-    return primitive_hash<oopDesc*>(entry._obj);
+    return primitive_hash<oopDesc*>(entry.object_no_keepalive());
   }
 
   static bool equals(const TsanOopMapTableKey& lhs, const TsanOopMapTableKey& rhs) {
-    return lhs._obj == rhs._obj;
+    return lhs.object_no_keepalive() == rhs.object_no_keepalive();
   }
 };
 

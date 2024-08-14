@@ -81,12 +81,8 @@ bool TsanOopMapTable::add_entry(TsanOopMapTableKey *entry, size_t size) {
 bool TsanOopMapTable::add_oop_with_size(oop obj, size_t size) {
   TsanOopMapTableKey new_entry(obj);
   bool added;
-  if (obj->fast_no_hash_check()) {
-    added = _table.put_when_absent(new_entry, size);
-  } else {
-    size_t* v = _table.put_if_absent(new_entry, size, &added);
-    assert(*v == size, "sanity");
-  }
+  size_t* v = _table.put_if_absent(new_entry, size, &added);
+  assert(*v == size, "sanity");
 
   if (added) {
     if (_table.maybe_grow(true /* use_large_table_sizes */)) {
