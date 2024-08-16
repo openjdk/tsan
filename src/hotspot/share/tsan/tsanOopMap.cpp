@@ -205,6 +205,7 @@ OopStorage* TsanOopMap::oop_storage() {
 void TsanOopMap::notify_tsan_for_freed_and_moved_objects() {
   assert(_oop_map != nullptr, "must be");
   assert(SafepointSynchronize::is_at_safepoint(), "must be");
+  assert(TsanOopMap_lock->is_locked(), "sanity check");
 
   bool disjoint_regions;
   int n_downward_moves = 0;
@@ -220,7 +221,6 @@ void TsanOopMap::notify_tsan_for_freed_and_moved_objects() {
   GrowableArray<TsanOopMapImpl::MovedEntry> moved_entries(len);
 
   {
-    MutexLocker mu(TsanOopMap_lock, Mutex::_no_safepoint_check_flag);
     _oop_map->collect_moved_objects_and_notify_freed(
                                  &moved_entries,
                                  &moves, &source_low, &source_high,

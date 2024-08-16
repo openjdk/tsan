@@ -94,6 +94,7 @@ uint WeakProcessor::ergo_workers(uint max_workers) {
 
 void WeakProcessor::Task::initialize() {
   assert(_nworkers != 0, "must be");
+  TSAN_ONLY(assert(_nworkers_completed == 0, "must be");)
   assert(_times == nullptr || _nworkers <= _times->max_threads(),
          "nworkers (%u) exceeds max threads (%u)",
          _nworkers, _times->max_threads());
@@ -109,6 +110,9 @@ WeakProcessor::Task::Task(uint nworkers) : Task(nullptr, nworkers) {}
 WeakProcessor::Task::Task(WeakProcessorTimes* times, uint nworkers) :
   _times(times),
   _nworkers(nworkers),
+#if INCLUDE_TSAN
+  _nworkers_completed(0),
+#endif
   _storage_states()
 {
   initialize();

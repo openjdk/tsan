@@ -97,7 +97,12 @@ void WeakProcessor::Task::work(uint worker_id,
   }
 
   TSAN_RUNTIME_ONLY(
-    TsanOopMap::notify_tsan_for_freed_and_moved_objects();
+    MutexLocker mu(TsanOopMap_lock, Mutex::_no_safepoint_check_flag);
+    _nworkers_completed ++;
+    assert((_nworkers >= _nworkers_completed), "must be");
+    if (_nworkers == _nworkers_completed) {
+      TsanOopMap::notify_tsan_for_freed_and_moved_objects();
+    }
   );
 }
 

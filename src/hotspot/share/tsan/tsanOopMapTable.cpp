@@ -71,6 +71,8 @@ TsanOopMapTable::~TsanOopMapTable() {
 }
 
 bool TsanOopMapTable::add_entry(TsanOopMapTableKey *entry, size_t size) {
+  assert(TsanOopMap_lock->is_locked(), "sanity check");
+
   bool added;
   size_t* v = _table.put_if_absent(*entry, size, &added);
   assert(added, "must be");
@@ -79,6 +81,8 @@ bool TsanOopMapTable::add_entry(TsanOopMapTableKey *entry, size_t size) {
 }
 
 bool TsanOopMapTable::add_oop_with_size(oop obj, size_t size) {
+  assert(TsanOopMap_lock->is_locked(), "sanity check");
+
   TsanOopMapTableKey new_entry(obj);
   bool added;
   size_t* v = _table.put_if_absent(new_entry, size, &added);
