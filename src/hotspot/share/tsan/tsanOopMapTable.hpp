@@ -52,7 +52,6 @@ namespace TsanOopMapImpl {
     TsanOopMapTableKey* key() const { return k; }
     size_t value() const { return v; }
   };
-
 }  // namespace TsanOopMapImpl
 
 // For tracking the lifecycle (alloc/move/free) of interesting oops
@@ -70,6 +69,7 @@ class TsanOopMapTableKey : public CHeapObj<mtInternal> {
  public:
   TsanOopMapTableKey(oop obj);
   TsanOopMapTableKey(const TsanOopMapTableKey& src);
+  TsanOopMapTableKey(const TsanOopMapTableKey& src, oop obj);
   TsanOopMapTableKey& operator=(const TsanOopMapTableKey&) = delete;
 
   void release_weak_handle() const;

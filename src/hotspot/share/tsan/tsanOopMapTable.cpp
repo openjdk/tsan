@@ -37,19 +37,18 @@ TsanOopMapTableKey::TsanOopMapTableKey(const TsanOopMapTableKey& src) {
   _obj = src._obj;
 }
 
+TsanOopMapTableKey::TsanOopMapTableKey(const TsanOopMapTableKey& entry, oop obj) {
+  assert(entry.object_no_keepalive() == obj, "must be");
+  _wh = entry._wh;
+  _obj = obj;
+}
+
 void TsanOopMapTableKey::release_weak_handle() const {
   _wh.release(TsanOopMap::oop_storage());
 }
 
 oop TsanOopMapTableKey::object_no_keepalive() const {
   return _wh.peek();
-}
-
-void TsanOopMapTableKey::update_obj() {
-  oop obj = _wh.peek();
-  if (obj != nullptr && obj != _obj) {
-    _obj = obj;
-  }
 }
 
 TsanOopMapTable::TsanOopMapTable() : _table(512, 0x3fffffff) {}
@@ -162,9 +161,8 @@ void TsanOopMapTable::collect_moved_objects_and_notify_freed(
           ++(*_n_downward_moves);
         }
 
-        entry.update_obj();
-
-        TsanOopMapTableKey* new_entry = new TsanOopMapTableKey(entry);
+        // Create a new entry using the existing weakhandle and the moved oop.
+        TsanOopMapTableKey *new_entry = new TsanOopMapTableKey(entry, entry.object_no_keepalive());
         TsanOopMapImpl::MovedEntry moved_entry = {new_entry, size};
         _moved_entries->append(moved_entry);
 

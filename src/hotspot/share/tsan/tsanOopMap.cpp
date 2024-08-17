@@ -220,22 +220,20 @@ void TsanOopMap::notify_tsan_for_freed_and_moved_objects() {
   GrowableArray<TsanOopMapImpl::PendingMove> moves(len);
   GrowableArray<TsanOopMapImpl::MovedEntry> moved_entries(len);
 
-  {
-    _oop_map->collect_moved_objects_and_notify_freed(
+  _oop_map->collect_moved_objects_and_notify_freed(
                                  &moved_entries,
                                  &moves, &source_low, &source_high,
                                  &target_low, &target_high,
                                  &n_downward_moves);
 
-    // Add back the entries with moved oops. New hashes for the entries
-    // are computed using the new oop address.
-    for (int i = 0; i < moved_entries.length(); i++) {
-      const TsanOopMapImpl::MovedEntry &e = moved_entries.at(i);
-      _oop_map->add_entry(e.key(), e.value());
-    }
+  // Add back the entries with moved oops. New hashes for the entries
+  // are computed using the new oop address.
+  for (int i = 0; i < moved_entries.length(); i++) {
+    const TsanOopMapImpl::MovedEntry &e = moved_entries.at(i);
+    _oop_map->add_entry(e.key(), e.value());
+    delete e.key();
   }
 
-  // No lock is needed after this point.
   if (moves.length() != 0) {
     // Notify Tsan about moved objects.
     disjoint_regions = (source_low >= target_high || source_high <= target_low);
