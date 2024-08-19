@@ -37,19 +37,18 @@ TsanOopMapTableKey::TsanOopMapTableKey(const TsanOopMapTableKey& src) {
   _obj = src._obj;
 }
 
+TsanOopMapTableKey::TsanOopMapTableKey(const TsanOopMapTableKey& entry, oop obj) {
+  assert(entry.object_no_keepalive() == obj, "must be");
+  _wh = entry._wh;
+  _obj = obj;
+}
+
 void TsanOopMapTableKey::release_weak_handle() const {
   _wh.release(TsanOopMap::oop_storage());
 }
 
 oop TsanOopMapTableKey::object_no_keepalive() const {
   return _wh.peek();
-}
-
-void TsanOopMapTableKey::update_obj() {
-  oop obj = _wh.peek();
-  if (obj != nullptr && obj != _obj) {
-    _obj = obj;
-  }
 }
 
 TsanOopMapTable::TsanOopMapTable() : _table(512, 0x3fffffff) {}
@@ -70,15 +69,23 @@ TsanOopMapTable::~TsanOopMapTable() {
   clear();
 }
 
+bool TsanOopMapTable::add_entry(TsanOopMapTableKey *entry, size_t size) {
+  assert(TsanOopMap_lock->is_locked(), "sanity check");
+
+  bool added;
+  size_t* v = _table.put_if_absent(*entry, size, &added);
+  assert(added, "must be");
+  assert(*v == size, "sanity");
+  return added;
+}
+
 bool TsanOopMapTable::add_oop_with_size(oop obj, size_t size) {
+  assert(TsanOopMap_lock->is_locked(), "sanity check");
+
   TsanOopMapTableKey new_entry(obj);
   bool added;
-  if (obj->fast_no_hash_check()) {
-    added = _table.put_when_absent(new_entry, size);
-  } else {
-    size_t* v = _table.put_if_absent(new_entry, size, &added);
-    assert(*v == size, "sanity");
-  }
+  size_t* v = _table.put_if_absent(new_entry, size, &added);
+  assert(*v == size, "sanity");
 
   if (added) {
     if (_table.maybe_grow(true /* use_large_table_sizes */)) {
@@ -114,21 +121,25 @@ size_t TsanOopMapTable::find(oop obj) {
 // - Colllect objects moved bt GC and add a PendingMove for each moved
 //   objects in a GrowableArray.
 void TsanOopMapTable::collect_moved_objects_and_notify_freed(
+         GrowableArray<TsanOopMapImpl::MovedEntry> *moved_entries,
          GrowableArray<TsanOopMapImpl::PendingMove> *moves,
          char **src_low, char **src_high,
          char **dest_low, char **dest_high,
          int *n_downward_moves) {
   struct IsDead {
+    GrowableArray<TsanOopMapImpl::MovedEntry> *_moved_entries;
     GrowableArray<TsanOopMapImpl::PendingMove> *_moves;
     char **_src_low;
     char **_src_high;
     char **_dest_low;
     char **_dest_high;
     int  *_n_downward_moves;
-    IsDead(GrowableArray<TsanOopMapImpl::PendingMove> *moves,
+    IsDead(GrowableArray<TsanOopMapImpl::MovedEntry> *moved_entries,
+           GrowableArray<TsanOopMapImpl::PendingMove> *moves,
            char **src_low, char **src_high,
            char **dest_low, char **dest_high,
-           int  *n_downward_moves) : _moves(moves), _src_low(src_low), _src_high(src_high),
+           int  *n_downward_moves) : _moved_entries(moved_entries), _moves(moves),
+                                     _src_low(src_low), _src_high(src_high),
                                      _dest_low(dest_low), _dest_high(dest_high),
                                      _n_downward_moves(n_downward_moves) {}
     bool do_entry(TsanOopMapTableKey& entry, size_t size) {
@@ -150,10 +161,16 @@ void TsanOopMapTable::collect_moved_objects_and_notify_freed(
           ++(*_n_downward_moves);
         }
 
-        entry.update_obj();
+        // Create a new entry using the existing weakhandle and the moved oop.
+        TsanOopMapTableKey *new_entry = new TsanOopMapTableKey(entry, entry.object_no_keepalive());
+        TsanOopMapImpl::MovedEntry moved_entry = {new_entry, size};
+        _moved_entries->append(moved_entry);
+
+        // Unlink the entry without releasing the weak_handle.
+        return true;
       }
       return false;
     }
-  } is_dead(moves, src_low, src_high, dest_low, dest_high, n_downward_moves);
+  } is_dead(moved_entries, moves, src_low, src_high, dest_low, dest_high, n_downward_moves);
   _table.unlink(&is_dead);
 }

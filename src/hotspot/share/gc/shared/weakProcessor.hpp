@@ -87,6 +87,7 @@ class WeakProcessor::Task {
 
   WeakProcessorTimes* _times;
   uint _nworkers;
+  TSAN_ONLY(uint _nworkers_completed;)
   OopStorageSetWeakParState<false, false> _storage_states;
 
   void initialize();
