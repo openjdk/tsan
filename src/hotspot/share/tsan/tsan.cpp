@@ -27,6 +27,7 @@
 #include "gc/shared/collectedHeap.hpp"
 #include "memory/universe.hpp"
 #include "oops/method.hpp"
+#include "runtime/interfaceSupport.inline.hpp"
 #include "runtime/java.hpp"
 #include "runtime/safepointVerifiers.hpp"
 #include "runtime/sharedRuntime.hpp"
@@ -87,12 +88,18 @@ extern "C" {
 JNIEXPORT void TsanSymbolize(julong loc,
                              AddFrameFunc add_frame,
                              void *ctx) {
-  DEBUG_ONLY(NoSafepointVerifier nsv;)
   assert(ThreadSanitizer, "Need -XX:+ThreadSanitizer");
 
   assert((loc & SharedRuntime::tsan_fake_pc_bit) != 0,
          "TSAN should only ask the JVM to symbolize locations the JVM gave TSAN"
         );
+
+  // Use ThreadInVMfromUnknown to transition to VM state to safely call into
+  // Method::checked_resolve_jmethod_id. That avoids assertion on thread state
+  // with AccessInternal::check_access_thread_state on JDK debug binary. As
+  // TsanSymbolize could be triggered from native or Java code, we can't simply
+  // make it a JVM_ENTRY to handle native -> vm state transition. See b/424368475.
+  ThreadInVMfromUnknown __tiv;
 
   jmethodID method_id = SharedRuntime::tsan_method_id_from_code_location(loc);
   u2 bci = SharedRuntime::tsan_bci_from_code_location(loc);
