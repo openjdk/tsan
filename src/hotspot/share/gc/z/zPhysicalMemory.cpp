@@ -275,6 +275,26 @@ void ZPhysicalMemoryManager::try_enable_uncommit(size_t min_capacity, size_t max
   log_info_p(gc, init)("Uncommit Delay: " UINTX_FORMAT "s", ZUncommitDelay);
 }
 
+void ZPhysicalMemoryManager::nmt_commit(zoffset offset, size_t size) const {
+  // NMT expects a 1-to-1 mapping between virtual and physical memory.
+  // ZGC can temporarily have multiple virtual addresses pointing to
+  // the same physical memory.
+  //
+  // When this function is called we don't know where in the virtual memory
+  // this physical memory will be mapped. So we fake that the virtual memory
+  // address is the heap base + the given offset.
+  const uintptr_t addr = ZAddressHeapBase + untype(offset);
+  MemTracker::record_virtual_memory_commit((void*)addr, size, CALLER_PC);
+}
+
+void ZPhysicalMemoryManager::nmt_uncommit(zoffset offset, size_t size) const {
+  if (MemTracker::enabled()) {
+    const uintptr_t addr = ZAddressHeapBase + untype(offset);
+    Tracker tracker(Tracker::uncommit);
+    tracker.record((address)addr, size);
+  }
+}
+
 void ZPhysicalMemoryManager::alloc(ZPhysicalMemory& pmem, size_t size) {
   assert(is_aligned(size, ZGranuleSize), "Invalid size");
 
